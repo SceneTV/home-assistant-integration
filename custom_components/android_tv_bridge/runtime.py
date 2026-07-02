@@ -84,27 +84,6 @@ def _clean_state(data: Mapping[str, Any] | None) -> dict[str, Any]:
     }
 
 
-def _seed_state_from_metadata(metadata: Mapping[str, Any]) -> dict[str, Any]:
-    """Build initial coordinator data without requiring the state endpoint."""
-    embedded_state = metadata.get("state")
-    seeded = _clean_state(embedded_state if isinstance(embedded_state, Mapping) else None)
-
-    metadata_fields = {
-        "launcher_mode": ("launcher_mode", "launcherMode"),
-        "launcher_modes": ("launcher_modes", "launcherModes"),
-    }
-    for target, keys in metadata_fields.items():
-        if target in seeded:
-            continue
-        for key in keys:
-            value = metadata.get(key)
-            if value is not None:
-                seeded[target] = value
-                break
-
-    return seeded
-
-
 class AndroidTVBridgeRuntime:
     """Owns one configured launcher connection."""
 
@@ -166,9 +145,10 @@ class AndroidTVBridgeRuntime:
         """Start the runtime."""
         self._stopped.clear()
         self.metadata = await self.client.async_get_metadata()
+        initial_state = await self.client.async_get_state()
         self.coordinator.async_set_updated_data(
             {
-                **_seed_state_from_metadata(self.metadata),
+                **_clean_state(initial_state),
                 "connection": False,
             }
         )
