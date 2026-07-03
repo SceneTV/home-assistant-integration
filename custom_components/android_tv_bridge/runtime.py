@@ -81,6 +81,11 @@ def _clean_state(data: Mapping[str, Any] | None) -> dict[str, Any]:
         "network_connected": network.get("connected"),
         "launcher_mode": data.get("launcher_mode") or data.get("launcherMode"),
         "launcher_modes": data.get("launcher_modes") or data.get("launcherModes"),
+        "active_profile": data.get("active_profile") or data.get("activeProfile"),
+        "active_profile_id": data.get("active_profile_id")
+        or data.get("activeProfileId"),
+        "profile_options": data.get("profile_options") or data.get("profileOptions"),
+        "profiles": data.get("profiles"),
     }
 
 

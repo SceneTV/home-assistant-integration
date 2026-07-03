@@ -223,3 +223,23 @@ set_launcher_mode:
           min: 1000
           max: 60000
           mode: box
+
+select_profile:
+  fields:
+    entry_id:
+      selector:
+        text:
+    device_id:
+      selector:
+        device:
+          integration: android_tv_bridge
+    profile:
+      required: true
+      selector:
+        text:
+    timeout_ms:
+      selector:
+        number:
+          min: 1000
+          max: 60000
+          mode: box

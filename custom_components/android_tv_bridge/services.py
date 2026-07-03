@@ -29,6 +29,7 @@ SERVICE_SHOW_IMAGE = "show_image"
 SERVICE_DISMISS_POPUP = "dismiss_popup"
 SERVICE_REFRESH_APPS = "refresh_apps"
 SERVICE_SET_LAUNCHER_MODE = "set_launcher_mode"
+SERVICE_SELECT_PROFILE = "select_profile"
 
 _TARGET_SCHEMA = {
     vol.Optional(ATTR_ENTRY_ID): str,
@@ -98,6 +99,12 @@ SERVICE_SCHEMAS = {
             vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int,
         }
     ),
+    SERVICE_SELECT_PROFILE: _schema(
+        {
+            vol.Required("profile"): cv.string,
+            vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int,
+        }
+    ),
 }
 
 
@@ -149,6 +156,10 @@ COMMAND_BUILDERS: dict[str, Callable[[ServiceCall], tuple[str, dict[str, Any]]]]
     SERVICE_SET_LAUNCHER_MODE: lambda call: (
         "set_launcher_mode",
         {"mode": call.data["mode"]},
+    ),
+    SERVICE_SELECT_PROFILE: lambda call: (
+        "select_profile",
+        {"profile": call.data["profile"]},
     ),
 }
 

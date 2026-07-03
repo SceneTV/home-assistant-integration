@@ -60,7 +60,8 @@
       "dismiss_popup": { "name": "Dismiss popup" }
     },
     "select": {
-      "launcher_mode": { "name": "Launcher mode" }
+      "launcher_mode": { "name": "Launcher mode" },
+      "active_profile": { "name": "Active profile" }
     }
   }
 }
