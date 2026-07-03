@@ -47,6 +47,28 @@ data:
 
 Supported D-pad keys are `DPAD_UP`, `DPAD_DOWN`, `DPAD_LEFT`, `DPAD_RIGHT`, and `DPAD_CENTER`. The aliases `UP`, `DOWN`, `LEFT`, `RIGHT`, `CENTER`, `SELECT`, `OK`, and `ENTER` are also accepted.
 
+## App and activity launch
+
+Use `android_tv_bridge.launch_app` to open an app by package name, or
+`android_tv_bridge.launch_activity` to open a specific activity.
+
+```yaml
+service: android_tv_bridge.launch_activity
+data:
+  device_id: your_home_assistant_device_id
+  package: com.example.app
+  activity: .MainActivity
+```
+
+The activity service also accepts a single Android component string:
+
+```yaml
+service: android_tv_bridge.launch_activity
+data:
+  device_id: your_home_assistant_device_id
+  component: com.example.app/.MainActivity
+```
+
 ## Development status
 
 The Android launcher API is still being implemented. Endpoint paths and payload shapes are isolated in `custom_components/android_tv_bridge/client.py` and `runtime.py` so the integration can track the launcher protocol as it stabilizes.

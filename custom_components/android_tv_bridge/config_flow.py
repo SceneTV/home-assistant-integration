@@ -156,7 +156,10 @@ class AndroidTVBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
                 _LOGGER.exception("Could not start discovered pairing")
                 return self.async_abort(reason="cannot_connect")
 
-        return self.async_show_form(step_id="zeroconf_confirm")
+        return self.async_show_form(
+            step_id="zeroconf_confirm",
+            description_placeholders={"name": self._name},
+        )
 
     async def async_step_pair(
         self, user_input: dict[str, Any] | None = None

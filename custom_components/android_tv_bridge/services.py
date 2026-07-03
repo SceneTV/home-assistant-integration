@@ -36,6 +36,7 @@ SUPPORTED_KEY_EVENTS = (
 )
 
 SERVICE_LAUNCH_APP = "launch_app"
+SERVICE_LAUNCH_ACTIVITY = "launch_activity"
 SERVICE_LAUNCH_INTENT = "launch_intent"
 SERVICE_OPEN_URI = "open_uri"
 SERVICE_SEND_KEY = "send_key"
@@ -57,6 +58,24 @@ def _schema(fields: Mapping[Any, Any]) -> vol.Schema:
     return vol.Schema({**_TARGET_SCHEMA, **fields})
 
 
+def _launch_activity_schema() -> vol.Schema:
+    return vol.Any(
+        _schema(
+            {
+                vol.Required("component"): cv.string,
+                vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int,
+            }
+        ),
+        _schema(
+            {
+                vol.Required("package"): cv.string,
+                vol.Required("activity"): cv.string,
+                vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int,
+            }
+        ),
+    )
+
+
 def _key_event(value: Any) -> str:
     key = cv.string(value).strip().upper()
     if key not in SUPPORTED_KEY_EVENTS:
@@ -71,6 +90,7 @@ SERVICE_SCHEMAS = {
             vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int,
         }
     ),
+    SERVICE_LAUNCH_ACTIVITY: _launch_activity_schema(),
     SERVICE_LAUNCH_INTENT: _schema(
         {
             vol.Required("intent_uri"): cv.string,
@@ -133,6 +153,10 @@ SERVICE_SCHEMAS = {
 
 COMMAND_BUILDERS: dict[str, Callable[[ServiceCall], tuple[str, dict[str, Any]]]] = {
     SERVICE_LAUNCH_APP: lambda call: ("launch_app", {"package": call.data["package"]}),
+    SERVICE_LAUNCH_ACTIVITY: lambda call: (
+        "launch_activity",
+        _launch_activity_payload(call),
+    ),
     SERVICE_LAUNCH_INTENT: lambda call: (
         "launch_intent",
         {"intent_uri": call.data["intent_uri"]},
@@ -185,6 +209,16 @@ COMMAND_BUILDERS: dict[str, Callable[[ServiceCall], tuple[str, dict[str, Any]]]]
         {"profile": call.data["profile"]},
     ),
 }
+
+
+def _launch_activity_payload(call: ServiceCall) -> dict[str, Any]:
+    """Build a launch_activity payload from component or package/activity fields."""
+    component = call.data.get("component")
+    package = call.data.get("package")
+    activity = call.data.get("activity")
+    if component:
+        return {"component": component}
+    return {"package": package, "activity": activity}
 
 
 def async_register_services(hass: HomeAssistant) -> None:

@@ -18,6 +18,39 @@ launch_app:
           max: 60000
           mode: box
 
+launch_activity:
+  name: Launch activity
+  description: Launch a specific Android app activity on SceneTV.
+  fields:
+    entry_id:
+      selector:
+        text:
+    device_id:
+      selector:
+        device:
+          integration: android_tv_bridge
+    package:
+      description: Android package name. Required when component is not provided.
+      example: com.example.app
+      selector:
+        text:
+    activity:
+      description: Activity class name. Required when component is not provided.
+      example: .MainActivity
+      selector:
+        text:
+    component:
+      description: Android component in package/.ActivityName form.
+      example: com.example.app/.MainActivity
+      selector:
+        text:
+    timeout_ms:
+      selector:
+        number:
+          min: 1000
+          max: 60000
+          mode: box
+
 launch_intent:
   fields:
     entry_id:
