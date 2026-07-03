@@ -69,6 +69,65 @@ data:
   component: com.example.app/.MainActivity
 ```
 
+## Popup notifications
+
+SceneTV exposes popup notifications as Home Assistant services and as a notify
+entity. The services are the most flexible option for automations because they
+support position, duration, color, transparency, font size, interrupt mode, and
+image payloads.
+
+```yaml
+action: android_tv_bridge.show_popup
+data:
+  device_id: your_home_assistant_device_id
+  title: Doorbell
+  text: Someone is at the front door
+  position: top-right
+  color: teal
+  transparency: 25%
+  duration_ms: 10000
+```
+
+Image popups can use an HTTP/HTTPS image URL or a base64 image payload:
+
+```yaml
+action: android_tv_bridge.show_image
+data:
+  device_id: your_home_assistant_device_id
+  title: Camera snapshot
+  text: Driveway motion detected
+  image_url: https://example.local/snapshot.jpg
+  position: center
+  duration_ms: 15000
+```
+
+For simple text notifications, use the generated notify entity with Home
+Assistant's `notify.send_message` action:
+
+```yaml
+action: notify.send_message
+target:
+  entity_id: notify.living_room_tv_popup_notifications
+data:
+  title: SceneTV
+  message: Movie night mode is active
+```
+
+Dashboard cards can send fixed popups by calling the service from a button:
+
+```yaml
+type: button
+name: Send TV popup
+tap_action:
+  action: call-service
+  service: android_tv_bridge.show_popup
+  data:
+    device_id: your_home_assistant_device_id
+    title: SceneTV
+    text: Test notification from the dashboard
+    duration_ms: 5000
+```
+
 ## Development status
 
 The Android launcher API is still being implemented. Endpoint paths and payload shapes are isolated in `custom_components/android_tv_bridge/client.py` and `runtime.py` so the integration can track the launcher protocol as it stabilizes.

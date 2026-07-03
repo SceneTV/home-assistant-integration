@@ -18,6 +18,8 @@ ZEROCONF_TYPE = "_scenetv._tcp.local."
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
     Platform.BUTTON,
+    Platform.MEDIA_PLAYER,
+    Platform.NOTIFY,
     Platform.SELECT,
     Platform.SENSOR,
 ]

@@ -59,6 +59,9 @@
       "home": { "name": "Home" },
       "dismiss_popup": { "name": "Dismiss popup" }
     },
+    "notify": {
+      "popup": { "name": "Popup notifications" }
+    },
     "select": {
       "launcher_mode": { "name": "Launcher mode" },
       "active_profile": { "name": "Active profile" }

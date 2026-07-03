@@ -13,11 +13,38 @@ from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
 
 from .const import DOMAIN
+from .media_contract import (
+    BRIDGE_MEDIA_COMMAND,
+    MEDIA_CONTROL_COMMANDS,
+    media_command_payload,
+    normalize_media_command,
+)
 from .runtime import AndroidTVBridgeRuntime
 
 ATTR_ENTRY_ID = "entry_id"
 ATTR_DEVICE_ID = "device_id"
 ATTR_TIMEOUT_MS = "timeout_ms"
+
+POPUP_POSITIONS = (
+    "top-left",
+    "top-right",
+    "bottom-left",
+    "bottom-right",
+    "center",
+)
+POPUP_FONT_SIZES = ("small", "medium", "large", "max")
+POPUP_COLORS = (
+    "grey",
+    "black",
+    "indigo",
+    "green",
+    "red",
+    "cyan",
+    "teal",
+    "amber",
+    "pink",
+)
+POPUP_TRANSPARENCIES = ("0%", "25%", "50%", "75%", "100%")
 
 SUPPORTED_KEY_EVENTS = (
     "DPAD_UP",
@@ -58,6 +85,32 @@ def _schema(fields: Mapping[Any, Any]) -> vol.Schema:
     return vol.Schema({**_TARGET_SCHEMA, **fields})
 
 
+def _duration_ms(value: Any) -> int:
+    """Validate a popup duration."""
+    return vol.All(cv.positive_int, vol.Range(min=1000, max=600000))(value)
+
+
+def _popup_fields(*, include_image: bool) -> dict[Any, Any]:
+    """Return shared popup service schema fields."""
+    fields: dict[Any, Any] = {
+        vol.Optional("title"): cv.string,
+        vol.Optional("text"): cv.string,
+        vol.Optional("position"): vol.In(POPUP_POSITIONS),
+        vol.Optional("font_size"): vol.In(POPUP_FONT_SIZES),
+        vol.Optional("color"): vol.In(POPUP_COLORS),
+        vol.Optional("transparency"): vol.In(POPUP_TRANSPARENCIES),
+        vol.Optional("interrupt"): cv.boolean,
+        vol.Optional("icon_url"): cv.url,
+        vol.Optional("icon_base64"): cv.string,
+        vol.Optional("duration_ms"): _duration_ms,
+        vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int,
+    }
+    if include_image:
+        fields[vol.Optional("image_url")] = cv.url
+        fields[vol.Optional("image_base64")] = cv.string
+    return fields
+
+
 def _launch_activity_schema() -> vol.Schema:
     return vol.Any(
         _schema(
@@ -81,6 +134,13 @@ def _key_event(value: Any) -> str:
     if key not in SUPPORTED_KEY_EVENTS:
         raise vol.Invalid("unsupported key event")
     return key
+
+
+def _media_command(value: Any) -> str:
+    command = normalize_media_command(cv.string(value))
+    if command not in MEDIA_CONTROL_COMMANDS:
+        raise vol.Invalid("unsupported media command")
+    return command
 
 
 SERVICE_SCHEMAS = {
@@ -111,28 +171,23 @@ SERVICE_SCHEMAS = {
     ),
     SERVICE_MEDIA_COMMAND: _schema(
         {
-            vol.Required("command"): vol.In(
-                ["play", "pause", "play_pause", "stop", "next", "previous", "seek"]
-            ),
-            vol.Optional("seek_position_ms"): cv.positive_int,
+            vol.Required("command"): _media_command,
             vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int,
         }
     ),
-    SERVICE_SHOW_POPUP: _schema(
-        {
-            vol.Required("text"): cv.string,
-            vol.Optional("title"): cv.string,
-            vol.Optional("duration_ms"): cv.positive_int,
-            vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int,
-        }
+    SERVICE_SHOW_POPUP: vol.All(
+        _schema(_popup_fields(include_image=False)),
+        vol.Any(
+            vol.Schema({vol.Required("text"): object}, extra=vol.ALLOW_EXTRA),
+            vol.Schema({vol.Required("title"): object}, extra=vol.ALLOW_EXTRA),
+        ),
     ),
-    SERVICE_SHOW_IMAGE: _schema(
-        {
-            vol.Required("image_url"): cv.url,
-            vol.Optional("title"): cv.string,
-            vol.Optional("duration_ms"): cv.positive_int,
-            vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int,
-        }
+    SERVICE_SHOW_IMAGE: vol.All(
+        _schema(_popup_fields(include_image=True)),
+        vol.Any(
+            vol.Schema({vol.Required("image_url"): object}, extra=vol.ALLOW_EXTRA),
+            vol.Schema({vol.Required("image_base64"): object}, extra=vol.ALLOW_EXTRA),
+        ),
     ),
     SERVICE_DISMISS_POPUP: _schema({vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int}),
     SERVICE_REFRESH_APPS: _schema({vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int}),
@@ -164,39 +219,16 @@ COMMAND_BUILDERS: dict[str, Callable[[ServiceCall], tuple[str, dict[str, Any]]]]
     SERVICE_OPEN_URI: lambda call: ("open_uri", {"uri": call.data["uri"]}),
     SERVICE_SEND_KEY: lambda call: ("send_key", {"key": call.data["key"]}),
     SERVICE_MEDIA_COMMAND: lambda call: (
-        "media_command",
-        {
-            "command": call.data["command"],
-            **(
-                {"seek_position_ms": call.data["seek_position_ms"]}
-                if "seek_position_ms" in call.data
-                else {}
-            ),
-        },
+        BRIDGE_MEDIA_COMMAND,
+        media_command_payload(call.data["command"]),
     ),
     SERVICE_SHOW_POPUP: lambda call: (
         "show_popup",
-        {
-            "text": call.data["text"],
-            **({"title": call.data["title"]} if "title" in call.data else {}),
-            **(
-                {"duration_ms": call.data["duration_ms"]}
-                if "duration_ms" in call.data
-                else {}
-            ),
-        },
+        _popup_payload(call),
     ),
     SERVICE_SHOW_IMAGE: lambda call: (
         "show_image",
-        {
-            "image_url": call.data["image_url"],
-            **({"title": call.data["title"]} if "title" in call.data else {}),
-            **(
-                {"duration_ms": call.data["duration_ms"]}
-                if "duration_ms" in call.data
-                else {}
-            ),
-        },
+        _popup_payload(call),
     ),
     SERVICE_DISMISS_POPUP: lambda call: ("dismiss_popup", {}),
     SERVICE_REFRESH_APPS: lambda call: ("refresh_apps", {}),
@@ -219,6 +251,28 @@ def _launch_activity_payload(call: ServiceCall) -> dict[str, Any]:
     if component:
         return {"component": component}
     return {"package": package, "activity": activity}
+
+
+def _popup_payload(call: ServiceCall) -> dict[str, Any]:
+    """Build a popup command payload from optional service fields."""
+    payload: dict[str, Any] = {}
+    for field in (
+        "title",
+        "text",
+        "position",
+        "font_size",
+        "color",
+        "transparency",
+        "interrupt",
+        "icon_url",
+        "icon_base64",
+        "image_url",
+        "image_base64",
+        "duration_ms",
+    ):
+        if field in call.data:
+            payload[field] = call.data[field]
+    return payload
 
 
 def async_register_services(hass: HomeAssistant) -> None:

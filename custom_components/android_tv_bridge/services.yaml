@@ -167,6 +167,8 @@ media_command:
           mode: box
 
 show_popup:
+  name: Show popup
+  description: Show a text notification popup on SceneTV.
   fields:
     entry_id:
       selector:
@@ -176,10 +178,64 @@ show_popup:
         device:
           integration: android_tv_bridge
     title:
+      description: Optional popup title.
       selector:
         text:
     text:
-      required: true
+      description: Popup body text. Required unless a title is provided.
+      selector:
+        text:
+          multiline: true
+    position:
+      default: top-right
+      selector:
+        select:
+          options:
+            - top-left
+            - top-right
+            - bottom-left
+            - bottom-right
+            - center
+    font_size:
+      default: medium
+      selector:
+        select:
+          options:
+            - small
+            - medium
+            - large
+            - max
+    color:
+      default: grey
+      selector:
+        select:
+          options:
+            - grey
+            - black
+            - indigo
+            - green
+            - red
+            - cyan
+            - teal
+            - amber
+            - pink
+    transparency:
+      default: 25%
+      selector:
+        select:
+          options:
+            - 0%
+            - 25%
+            - 50%
+            - 75%
+            - 100%
+    interrupt:
+      selector:
+        boolean:
+    icon_url:
+      selector:
+        text:
+    icon_base64:
       selector:
         text:
           multiline: true
@@ -197,6 +253,8 @@ show_popup:
           mode: box
 
 show_image:
+  name: Show image popup
+  description: Show an image notification popup on SceneTV.
   fields:
     entry_id:
       selector:
@@ -206,12 +264,76 @@ show_image:
         device:
           integration: android_tv_bridge
     title:
+      description: Optional popup title.
       selector:
         text:
+    text:
+      description: Optional popup body text.
+      selector:
+        text:
+          multiline: true
     image_url:
-      required: true
+      description: HTTP or HTTPS image URL. Required unless image_base64 is provided.
       selector:
         text:
+    image_base64:
+      description: Base64-encoded image data. Required unless image_url is provided.
+      selector:
+        text:
+          multiline: true
+    position:
+      default: center
+      selector:
+        select:
+          options:
+            - top-left
+            - top-right
+            - bottom-left
+            - bottom-right
+            - center
+    font_size:
+      default: medium
+      selector:
+        select:
+          options:
+            - small
+            - medium
+            - large
+            - max
+    color:
+      default: grey
+      selector:
+        select:
+          options:
+            - grey
+            - black
+            - indigo
+            - green
+            - red
+            - cyan
+            - teal
+            - amber
+            - pink
+    transparency:
+      default: 25%
+      selector:
+        select:
+          options:
+            - 0%
+            - 25%
+            - 50%
+            - 75%
+            - 100%
+    interrupt:
+      selector:
+        boolean:
+    icon_url:
+      selector:
+        text:
+    icon_base64:
+      selector:
+        text:
+          multiline: true
     duration_ms:
       selector:
         number:
