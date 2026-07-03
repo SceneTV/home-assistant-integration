@@ -60,6 +60,8 @@ open_uri:
           mode: box
 
 send_key:
+  name: Send key
+  description: Send a supported remote-control key event to SceneTV.
   fields:
     entry_id:
       selector:
@@ -69,9 +71,27 @@ send_key:
         device:
           integration: android_tv_bridge
     key:
+      name: Key
+      description: D-pad key to send. D-pad aliases are accepted.
       required: true
+      example: DPAD_CENTER
       selector:
-        text:
+        select:
+          mode: dropdown
+          options:
+            - DPAD_UP
+            - DPAD_DOWN
+            - DPAD_LEFT
+            - DPAD_RIGHT
+            - DPAD_CENTER
+            - UP
+            - DOWN
+            - LEFT
+            - RIGHT
+            - CENTER
+            - SELECT
+            - OK
+            - ENTER
     timeout_ms:
       selector:
         number:

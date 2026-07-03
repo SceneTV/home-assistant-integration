@@ -19,6 +19,22 @@ ATTR_ENTRY_ID = "entry_id"
 ATTR_DEVICE_ID = "device_id"
 ATTR_TIMEOUT_MS = "timeout_ms"
 
+SUPPORTED_KEY_EVENTS = (
+    "DPAD_UP",
+    "DPAD_DOWN",
+    "DPAD_LEFT",
+    "DPAD_RIGHT",
+    "DPAD_CENTER",
+    "UP",
+    "DOWN",
+    "LEFT",
+    "RIGHT",
+    "CENTER",
+    "SELECT",
+    "OK",
+    "ENTER",
+)
+
 SERVICE_LAUNCH_APP = "launch_app"
 SERVICE_LAUNCH_INTENT = "launch_intent"
 SERVICE_OPEN_URI = "open_uri"
@@ -39,6 +55,13 @@ _TARGET_SCHEMA = {
 
 def _schema(fields: Mapping[Any, Any]) -> vol.Schema:
     return vol.Schema({**_TARGET_SCHEMA, **fields})
+
+
+def _key_event(value: Any) -> str:
+    key = cv.string(value).strip().upper()
+    if key not in SUPPORTED_KEY_EVENTS:
+        raise vol.Invalid("unsupported key event")
+    return key
 
 
 SERVICE_SCHEMAS = {
@@ -62,7 +85,7 @@ SERVICE_SCHEMAS = {
     ),
     SERVICE_SEND_KEY: _schema(
         {
-            vol.Required("key"): cv.string,
+            vol.Required("key"): _key_event,
             vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int,
         }
     ),

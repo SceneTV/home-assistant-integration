@@ -34,6 +34,19 @@ Initial scope:
 - Authenticated local WebSocket connection
 - Sensors, binary sensors, buttons, launcher mode select, services, and bridge events
 
+## Key events
+
+Use the `android_tv_bridge.send_key` service to send supported remote-control key events to a paired SceneTV launcher. The service forwards the selected key as a `send_key` command payload, for example:
+
+```yaml
+service: android_tv_bridge.send_key
+data:
+  device_id: your_home_assistant_device_id
+  key: DPAD_CENTER
+```
+
+Supported D-pad keys are `DPAD_UP`, `DPAD_DOWN`, `DPAD_LEFT`, `DPAD_RIGHT`, and `DPAD_CENTER`. The aliases `UP`, `DOWN`, `LEFT`, `RIGHT`, `CENTER`, `SELECT`, `OK`, and `ENTER` are also accepted.
+
 ## Development status
 
 The Android launcher API is still being implemented. Endpoint paths and payload shapes are isolated in `custom_components/android_tv_bridge/client.py` and `runtime.py` so the integration can track the launcher protocol as it stabilizes.
