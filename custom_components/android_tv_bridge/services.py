@@ -66,6 +66,7 @@ SERVICE_LAUNCH_APP = "launch_app"
 SERVICE_LAUNCH_ACTIVITY = "launch_activity"
 SERVICE_LAUNCH_INTENT = "launch_intent"
 SERVICE_OPEN_URI = "open_uri"
+SERVICE_CREATE_DEEP_LINK_SHORTCUT = "create_deep_link_shortcut"
 SERVICE_SEND_KEY = "send_key"
 SERVICE_MEDIA_COMMAND = "media_command"
 SERVICE_SHOW_POPUP = "show_popup"
@@ -163,6 +164,26 @@ SERVICE_SCHEMAS = {
             vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int,
         }
     ),
+    SERVICE_CREATE_DEEP_LINK_SHORTCUT: vol.All(
+        _schema(
+            {
+                vol.Required("title"): cv.string,
+                vol.Optional("subtitle"): cv.string,
+                vol.Optional("intent_uri"): cv.string,
+                vol.Optional("uri"): cv.string,
+                vol.Optional("package"): cv.string,
+                vol.Optional("package_name"): cv.string,
+                vol.Optional("image_uri"): cv.string,
+                vol.Optional("image_url"): cv.string,
+                vol.Optional("enabled", default=True): cv.boolean,
+                vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int,
+            }
+        ),
+        vol.Any(
+            vol.Schema({vol.Required("intent_uri"): object}, extra=vol.ALLOW_EXTRA),
+            vol.Schema({vol.Required("uri"): object}, extra=vol.ALLOW_EXTRA),
+        ),
+    ),
     SERVICE_SEND_KEY: _schema(
         {
             vol.Required("key"): _key_event,
@@ -217,6 +238,10 @@ COMMAND_BUILDERS: dict[str, Callable[[ServiceCall], tuple[str, dict[str, Any]]]]
         {"intent_uri": call.data["intent_uri"]},
     ),
     SERVICE_OPEN_URI: lambda call: ("open_uri", {"uri": call.data["uri"]}),
+    SERVICE_CREATE_DEEP_LINK_SHORTCUT: lambda call: (
+        "create_deep_link_shortcut",
+        _deep_link_shortcut_payload(call),
+    ),
     SERVICE_SEND_KEY: lambda call: ("send_key", {"key": call.data["key"]}),
     SERVICE_MEDIA_COMMAND: lambda call: (
         BRIDGE_MEDIA_COMMAND,
@@ -251,6 +276,24 @@ def _launch_activity_payload(call: ServiceCall) -> dict[str, Any]:
     if component:
         return {"component": component}
     return {"package": package, "activity": activity}
+
+
+def _deep_link_shortcut_payload(call: ServiceCall) -> dict[str, Any]:
+    """Build a create_deep_link_shortcut payload from optional service fields."""
+    payload: dict[str, Any] = {"title": call.data["title"]}
+    for field in (
+        "subtitle",
+        "intent_uri",
+        "uri",
+        "package",
+        "package_name",
+        "image_uri",
+        "image_url",
+        "enabled",
+    ):
+        if field in call.data:
+            payload[field] = call.data[field]
+    return payload
 
 
 def _popup_payload(call: ServiceCall) -> dict[str, Any]:

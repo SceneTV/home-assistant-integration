@@ -85,6 +85,22 @@ data:
   component: com.example.app/.MainActivity
 ```
 
+## Deep-link shortcuts
+
+Use `android_tv_bridge.open_uri` or `android_tv_bridge.launch_intent` to open a
+deep link immediately. Use `android_tv_bridge.create_deep_link_shortcut` to add
+a persistent shortcut tile to the active SceneTV launcher profile.
+
+```yaml
+service: android_tv_bridge.create_deep_link_shortcut
+data:
+  device_id: your_home_assistant_device_id
+  title: YouTube Subscriptions
+  subtitle: YouTube
+  uri: https://www.youtube.com/feed/subscriptions
+  package: com.google.android.youtube.tv
+```
+
 ## Popup notifications
 
 SceneTV exposes popup notifications as Home Assistant services and as a notify

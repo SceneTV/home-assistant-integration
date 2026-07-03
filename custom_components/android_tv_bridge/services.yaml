@@ -92,6 +92,63 @@ open_uri:
           max: 60000
           mode: box
 
+create_deep_link_shortcut:
+  name: Create deep-link shortcut
+  description: Add a deep-link shortcut tile to the active SceneTV launcher profile.
+  fields:
+    entry_id:
+      selector:
+        text:
+    device_id:
+      selector:
+        device:
+          integration: android_tv_bridge
+    title:
+      required: true
+      description: Shortcut title shown on SceneTV.
+      example: YouTube Subscriptions
+      selector:
+        text:
+    subtitle:
+      description: Optional secondary label.
+      example: YouTube
+      selector:
+        text:
+    intent_uri:
+      description: Android intent URI. Required when URI is not provided.
+      example: intent://www.youtube.com/feed/subscriptions#Intent;scheme=https;package=com.google.android.youtube.tv;end
+      selector:
+        text:
+          multiline: true
+    uri:
+      description: Standard URI/deep link. Required when intent URI is not provided.
+      example: https://www.youtube.com/feed/subscriptions
+      selector:
+        text:
+    package:
+      description: Optional Android package to associate with the shortcut.
+      example: com.google.android.youtube.tv
+      selector:
+        text:
+    image_uri:
+      description: Optional image URI for the shortcut tile.
+      selector:
+        text:
+    image_url:
+      description: Optional image URL for the shortcut tile.
+      selector:
+        text:
+    enabled:
+      default: true
+      selector:
+        boolean:
+    timeout_ms:
+      selector:
+        number:
+          min: 1000
+          max: 60000
+          mode: box
+
 send_key:
   name: Send key
   description: Send a supported remote-control key event to SceneTV.
