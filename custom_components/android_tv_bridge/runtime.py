@@ -35,9 +35,18 @@ from .const import (
     EVENT_COMMAND_RESULT,
     EVENT_MAP,
 )
+from .media_contract import BRIDGE_MEDIA_COMMAND, media_command_payload, milliseconds_to_seconds
 
 _LOGGER = logging.getLogger(__name__)
 _UPDATE_INTERVAL = timedelta(seconds=30)
+
+
+def _first_present(*values: Any) -> Any:
+    """Return the first value that is present, preserving falsy values."""
+    for value in values:
+        if value is not None:
+            return value
+    return None
 
 
 def _clean_state(data: Mapping[str, Any] | None) -> dict[str, Any]:
@@ -53,6 +62,26 @@ def _clean_state(data: Mapping[str, Any] | None) -> dict[str, Any]:
     if not isinstance(network, Mapping):
         network = {}
 
+    media_position_ms = _first_present(
+        data.get("media_position_ms"),
+        media.get("position_ms"),
+    )
+    media_duration_ms = _first_present(
+        data.get("media_duration_ms"),
+        media.get("duration_ms"),
+    )
+    media_position = (
+        milliseconds_to_seconds(media_position_ms)
+        if media_position_ms is not None
+        else _first_present(data.get("media_position"), media.get("position"))
+    )
+    media_duration = (
+        milliseconds_to_seconds(media_duration_ms)
+        if media_duration_ms is not None
+        else _first_present(data.get("media_duration"), media.get("duration"))
+    )
+    media_state = _first_present(data.get("media_state"), media.get("state"))
+
     return {
         **dict(data),
         "foreground_app": data.get("foreground_app") or data.get("foregroundApp"),
@@ -67,16 +96,35 @@ def _clean_state(data: Mapping[str, Any] | None) -> dict[str, Any]:
         else data.get("accessibilityEnabled"),
         "app_list_version": data.get("app_list_version") or data.get("appListVersion"),
         "last_key": data.get("last_key") or data.get("lastKey"),
-        "media_app": media.get("app"),
-        "media_title": media.get("title"),
-        "media_artist": media.get("artist"),
-        "media_album": media.get("album"),
-        "media_state": media.get("state"),
-        "media_position": media.get("position"),
-        "media_duration": media.get("duration"),
+        "media_app": _first_present(
+            data.get("media_app"),
+            media.get("app_name"),
+            media.get("app"),
+        ),
+        "media_title": _first_present(data.get("media_title"), media.get("title")),
+        "media_artist": _first_present(data.get("media_artist"), media.get("artist")),
+        "media_album": _first_present(data.get("media_album"), media.get("album")),
+        "media_state": media_state,
+        "media_position": media_position,
+        "media_position_ms": media_position_ms,
+        "media_duration": media_duration,
+        "media_duration_ms": media_duration_ms,
+        "media_updated_at": _first_present(
+            data.get("media_updated_at"),
+            media.get("updated_at"),
+            data.get("updated_at"),
+        ),
+        "media_supported_actions": _first_present(
+            data.get("media_supported_actions"),
+            media.get("supported_actions"),
+        ),
+        "media_artwork_url": _first_present(
+            data.get("media_artwork_url"),
+            media.get("artwork_url"),
+        ),
         "playing": data.get("playing")
         if "playing" in data
-        else media.get("state") == "playing",
+        else media_state == "playing",
         "idle": data.get("idle"),
         "network_connected": network.get("connected"),
         "launcher_mode": data.get("launcher_mode") or data.get("launcherMode"),
@@ -331,3 +379,10 @@ class AndroidTVBridgeRuntime:
         if result.get("status") in {"failed", "rejected", "unsupported", "timed_out"}:
             raise HomeAssistantError(str(result.get("error") or result["status"]))
         return result
+
+    async def async_media_command(self, command: str) -> dict[str, Any]:
+        """Send a media control command to the launcher."""
+        return await self.async_send_command(
+            BRIDGE_MEDIA_COMMAND,
+            media_command_payload(command),
+        )

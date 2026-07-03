@@ -32,7 +32,23 @@ Initial scope:
 - Config flow with TV-approved pairing
 - One Home Assistant device per paired launcher
 - Authenticated local WebSocket connection
-- Sensors, binary sensors, buttons, launcher mode select, services, and bridge events
+- Media player, sensors, binary sensors, buttons, launcher mode select, notify entity, services, and bridge events
+
+## Media controls
+
+SceneTV exposes the active Android media session as a Home Assistant media player
+entity. Standard Home Assistant media actions map to the launcher
+`media_command` envelope:
+
+- `play`
+- `pause`
+- `play_pause`
+- `stop`
+- `next`
+- `previous`
+
+The lower-level `android_tv_bridge.media_command` service also accepts `rewind`
+and `fast_forward` for automations that need those remote-control keys.
 
 ## Key events
 

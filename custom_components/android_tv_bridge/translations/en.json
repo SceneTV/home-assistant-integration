@@ -62,6 +62,9 @@
     "notify": {
       "popup": { "name": "Popup notifications" }
     },
+    "media_player": {
+      "media_player": { "name": "Media controls" }
+    },
     "select": {
       "launcher_mode": { "name": "Launcher mode" },
       "active_profile": { "name": "Active profile" }

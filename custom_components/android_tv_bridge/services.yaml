@@ -152,13 +152,8 @@ media_command:
             - stop
             - next
             - previous
-            - seek
-    seek_position_ms:
-      selector:
-        number:
-          min: 0
-          max: 86400000
-          mode: box
+            - rewind
+            - fast_forward
     timeout_ms:
       selector:
         number:
