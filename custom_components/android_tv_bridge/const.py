@@ -13,7 +13,7 @@ DEFAULT_API_VERSION = "v1"
 DEFAULT_PORT = 8765
 DEFAULT_TIMEOUT = 10
 
-ZEROCONF_TYPE = "_android_tv_launcher._tcp.local."
+ZEROCONF_TYPE = "_scenetv._tcp.local."
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,

@@ -28,7 +28,7 @@ Restart Home Assistant, then add **SceneTV Android TV Bridge** from **Settings -
 
 Initial scope:
 
-- Zeroconf discovery for `_android_tv_launcher._tcp.local.`
+- Zeroconf discovery for `_scenetv._tcp.local.`
 - Config flow with TV-approved pairing
 - One Home Assistant device per paired launcher
 - Authenticated local WebSocket connection

@@ -10,5 +10,5 @@
   "issue_tracker": "https://github.com/thgrace/scenetv-ha-integration/issues",
   "requirements": [],
   "version": "0.1.1",
-  "zeroconf": ["_android_tv_launcher._tcp.local."]
+  "zeroconf": ["_scenetv._tcp.local."]
 }
