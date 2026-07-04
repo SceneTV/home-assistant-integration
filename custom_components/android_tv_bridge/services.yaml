@@ -138,6 +138,16 @@ create_deep_link_shortcut:
       description: Optional image URL for the shortcut tile.
       selector:
         text:
+    launch_mode:
+      default: open
+      description: Choose whether SceneTV just opens the shortcut or returns home when playback completes.
+      selector:
+        select:
+          options:
+            - label: Open
+              value: open
+            - label: Play then exit
+              value: play_then_exit
     enabled:
       default: true
       selector:

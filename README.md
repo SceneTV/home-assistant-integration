@@ -99,6 +99,7 @@ data:
   subtitle: YouTube
   uri: https://www.youtube.com/feed/subscriptions
   package: com.google.android.youtube.tv
+  launch_mode: play_then_exit
 ```
 
 ## Popup notifications

@@ -175,6 +175,7 @@ SERVICE_SCHEMAS = {
                 vol.Optional("package_name"): cv.string,
                 vol.Optional("image_uri"): cv.string,
                 vol.Optional("image_url"): cv.string,
+                vol.Optional("launch_mode", default="open"): vol.In(("open", "play_then_exit")),
                 vol.Optional("enabled", default=True): cv.boolean,
                 vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int,
             }
@@ -289,6 +290,7 @@ def _deep_link_shortcut_payload(call: ServiceCall) -> dict[str, Any]:
         "package_name",
         "image_uri",
         "image_url",
+        "launch_mode",
         "enabled",
     ):
         if field in call.data:
