@@ -4,10 +4,10 @@
   "after_dependencies": ["zeroconf"],
   "codeowners": [],
   "config_flow": true,
-  "documentation": "https://github.com/thgrace/scenetv-ha-integration",
+  "documentation": "https://github.com/SceneTV/home-assistant-integration",
   "integration_type": "device",
   "iot_class": "local_push",
-  "issue_tracker": "https://github.com/thgrace/scenetv-ha-integration/issues",
+  "issue_tracker": "https://github.com/SceneTV/home-assistant-integration/issues",
   "requirements": [],
   "version": "0.1.4",
   "zeroconf": ["_scenetv._tcp.local."]
