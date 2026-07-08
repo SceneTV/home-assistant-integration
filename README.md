@@ -8,7 +8,7 @@ This repository is structured as a HACS custom integration repository.
 
 1. In Home Assistant, open HACS.
 2. Open the three-dot menu and choose **Custom repositories**.
-3. Add this repository URL.
+3. Add `https://github.com/SceneTV/home-assistant-integration`.
 4. Select **Integration** as the category.
 5. Install **SceneTV Android TV Bridge**.
 6. Restart Home Assistant.
