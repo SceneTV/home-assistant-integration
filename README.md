@@ -286,6 +286,65 @@ actions:
       area_id: living_room
 ```
 
+## Device triggers
+
+Each SceneTV TV offers device triggers, so automations can be built from the
+device page or the automation editor without writing event YAML. Pick the TV
+under **When** > **Device**.
+
+| Trigger | Fires on | Optional filter |
+| --- | --- | --- |
+| Opened an app | `foreground_app_changed` | `package`, such as `com.plexapp.android` |
+| Started / paused / stopped playing | `media_started`, `media_paused`, `media_stopped` | `package` of the media app |
+| Switched profile | `profile_changed` | `profile`, a profile name or id |
+| Showed / dismissed a popup | `popup_shown`, `popup_dismissed` | |
+| Popup button pressed | `popup_action` | `action_id` |
+| Action tile pressed | `action_tile_pressed` | `action_id` |
+| Web card or popup sent an action | `web_action` | `action_id` (matches `action`) |
+| Started the next queue item / finished the queue | `queue_item_started`, `queue_finished` | |
+| Became idle / became active | `idle_changed` | |
+
+```yaml
+triggers:
+  - trigger: device
+    domain: android_tv_bridge
+    device_id: 0123456789abcdef  # the TV's Home Assistant device id
+    type: app_opened
+    package: com.netflix.ninja
+```
+
+The trigger variables include the original event as `trigger.event`, so
+`trigger.event.data` holds the launcher payload.
+
+Popup buttons, action tiles and the idle signal need launcher support that is
+still in progress. Those triggers are listed now and start firing once the
+launcher sends the events; nothing needs to change on the Home Assistant side.
+
+## Blueprints
+
+Automation blueprints live in
+[`blueprints/automation/android_tv_bridge`](blueprints/automation/android_tv_bridge).
+HACS does not install blueprints, so import each one from **Settings** >
+**Automations & scenes** > **Blueprints** > **Import blueprint** with its URL:
+
+| Blueprint | What it does | Import URL |
+| --- | --- | --- |
+| Movie mode | Dims lights when playback starts, raises them on pause, restores them on stop. Optional app list and after-sunset only. | `https://github.com/SceneTV/home-assistant-integration/blob/main/blueprints/automation/android_tv_bridge/movie_mode.yaml` |
+| Doorbell popup | Shows a camera snapshot over any app when a doorbell or motion sensor fires. Optionally pauses playback. | `https://github.com/SceneTV/home-assistant-integration/blob/main/blueprints/automation/android_tv_bridge/doorbell_popup.yaml` |
+| Bedtime lock | Warns before bedtime, then stops playback and goes home. Until morning, closes apps opened on the kids profile. | `https://github.com/SceneTV/home-assistant-integration/blob/main/blueprints/automation/android_tv_bridge/bedtime_lock.yaml` |
+| Lights off when idle | Turns lights off after nothing has played for a while (and on the TV's idle trigger once the launcher sends it). | `https://github.com/SceneTV/home-assistant-integration/blob/main/blueprints/automation/android_tv_bridge/lights_off_when_idle.yaml` |
+| Profile from presence | Switches the TV to a person's profile when they come home, and optionally to another when they leave. | `https://github.com/SceneTV/home-assistant-integration/blob/main/blueprints/automation/android_tv_bridge/presence_profile.yaml` |
+
+Notes:
+
+- The bedtime lock is a soft lock. SceneTV profiles do not restrict apps yet,
+  so switching profile on the TV gets around it.
+- The doorbell popup loads the snapshot from Home Assistant through the
+  camera's short-lived access token, so the TV needs to reach the Home
+  Assistant URL you enter.
+- Profiles are matched by name, so renaming a profile on the TV means updating
+  the blueprint inputs.
+
 ## Development
 
 Tests use `pytest-homeassistant-custom-component`:
