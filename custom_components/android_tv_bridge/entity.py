@@ -28,8 +28,12 @@ class AndroidTVBridgeEntity(CoordinatorEntity):
 
     @property
     def available(self) -> bool:
-        """Return whether coordinator data is available."""
-        return self.coordinator.last_update_success
+        """Return whether the launcher is reachable.
+
+        Commands and live state both ride the WebSocket, so entities go
+        unavailable while it is down, even if HTTP polling still answers.
+        """
+        return self.coordinator.last_update_success and self.runtime.connected
 
 
 def prefixed_translation_key(key: str) -> str:

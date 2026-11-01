@@ -13,7 +13,8 @@ from .const import DOMAIN
 from .entity import AndroidTVBridgeEntity
 from .runtime import AndroidTVBridgeRuntime
 
-_FALLBACK_MODES = ["normal", "minimal", "screensaver"]
+# Matches LAUNCHER_MODES in the launcher; used only if state omits the list.
+_FALLBACK_MODES = ["default", "focus", "ambient"]
 
 
 async def async_setup_entry(
