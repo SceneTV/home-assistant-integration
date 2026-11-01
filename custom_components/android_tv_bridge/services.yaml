@@ -1,7 +1,5 @@
 launch_app:
   target:
-    device:
-      integration: android_tv_bridge
     entity:
       integration: android_tv_bridge
   fields:
@@ -23,8 +21,6 @@ launch_activity:
   name: Launch activity
   description: Launch a specific Android app activity on SceneTV.
   target:
-    device:
-      integration: android_tv_bridge
     entity:
       integration: android_tv_bridge
   fields:
@@ -55,8 +51,6 @@ launch_activity:
 
 launch_intent:
   target:
-    device:
-      integration: android_tv_bridge
     entity:
       integration: android_tv_bridge
   fields:
@@ -77,8 +71,6 @@ launch_intent:
 
 open_uri:
   target:
-    device:
-      integration: android_tv_bridge
     entity:
       integration: android_tv_bridge
   fields:
@@ -100,8 +92,6 @@ create_deep_link_shortcut:
   name: Create deep-link shortcut
   description: Add a deep-link shortcut tile to the active SceneTV launcher profile.
   target:
-    device:
-      integration: android_tv_bridge
     entity:
       integration: android_tv_bridge
   fields:
@@ -168,8 +158,6 @@ send_key:
   name: Send key
   description: Send a supported remote-control key event to SceneTV.
   target:
-    device:
-      integration: android_tv_bridge
     entity:
       integration: android_tv_bridge
   fields:
@@ -207,8 +195,6 @@ send_key:
 
 media_command:
   target:
-    device:
-      integration: android_tv_bridge
     entity:
       integration: android_tv_bridge
   fields:
@@ -239,8 +225,6 @@ show_popup:
   name: Show popup
   description: Show a text notification popup on SceneTV.
   target:
-    device:
-      integration: android_tv_bridge
     entity:
       integration: android_tv_bridge
   fields:
@@ -326,8 +310,6 @@ show_image:
   name: Show image popup
   description: Show an image notification popup on SceneTV.
   target:
-    device:
-      integration: android_tv_bridge
     entity:
       integration: android_tv_bridge
   fields:
@@ -420,8 +402,6 @@ show_image:
 
 dismiss_popup:
   target:
-    device:
-      integration: android_tv_bridge
     entity:
       integration: android_tv_bridge
   fields:
@@ -437,8 +417,6 @@ dismiss_popup:
 
 refresh_apps:
   target:
-    device:
-      integration: android_tv_bridge
     entity:
       integration: android_tv_bridge
   fields:
@@ -454,8 +432,6 @@ refresh_apps:
 
 set_launcher_mode:
   target:
-    device:
-      integration: android_tv_bridge
     entity:
       integration: android_tv_bridge
   fields:
@@ -475,8 +451,6 @@ set_launcher_mode:
 
 select_profile:
   target:
-    device:
-      integration: android_tv_bridge
     entity:
       integration: android_tv_bridge
   fields:
@@ -496,8 +470,6 @@ select_profile:
 
 show_web_popup:
   target:
-    device:
-      integration: android_tv_bridge
     entity:
       integration: android_tv_bridge
   fields:
@@ -559,8 +531,6 @@ show_web_popup:
 
 queue_add:
   target:
-    device:
-      integration: android_tv_bridge
     entity:
       integration: android_tv_bridge
   fields:
@@ -603,8 +573,6 @@ queue_add:
 
 queue_remove:
   target:
-    device:
-      integration: android_tv_bridge
     entity:
       integration: android_tv_bridge
   fields:
@@ -625,8 +593,6 @@ queue_remove:
 
 queue_move:
   target:
-    device:
-      integration: android_tv_bridge
     entity:
       integration: android_tv_bridge
   fields:
@@ -653,8 +619,6 @@ queue_move:
 
 queue_clear:
   target:
-    device:
-      integration: android_tv_bridge
     entity:
       integration: android_tv_bridge
   fields:
@@ -670,8 +634,6 @@ queue_clear:
 
 queue_play:
   target:
-    device:
-      integration: android_tv_bridge
     entity:
       integration: android_tv_bridge
   fields:
@@ -690,8 +652,6 @@ queue_play:
 
 queue_next:
   target:
-    device:
-      integration: android_tv_bridge
     entity:
       integration: android_tv_bridge
   fields:
@@ -707,8 +667,6 @@ queue_next:
 
 queue_pause:
   target:
-    device:
-      integration: android_tv_bridge
     entity:
       integration: android_tv_bridge
   fields:
