@@ -2,15 +2,25 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable, Mapping
 from typing import Any
 
 import voluptuous as vol
 
+from homeassistant.const import (
+    ATTR_AREA_ID,
+    ATTR_DEVICE_ID,
+    ATTR_ENTITY_ID,
+    ATTR_FLOOR_ID,
+    ATTR_LABEL_ID,
+)
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
+from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.service import async_extract_referenced_entity_ids
 
 from .const import DOMAIN
 from .media_contract import (
@@ -22,8 +32,20 @@ from .media_contract import (
 from .runtime import AndroidTVBridgeRuntime
 
 ATTR_ENTRY_ID = "entry_id"
-ATTR_DEVICE_ID = "device_id"
 ATTR_TIMEOUT_MS = "timeout_ms"
+
+TARGET_KEYS = (
+    ATTR_DEVICE_ID,
+    ATTR_AREA_ID,
+    ATTR_ENTITY_ID,
+    ATTR_FLOOR_ID,
+    ATTR_LABEL_ID,
+)
+
+WEB_DIMENSION_MIN_DP = 120
+WEB_DIMENSION_MAX_DP = 2000
+QUEUE_POSITIONS = ("end", "next")
+QUEUE_ITEM_FIELDS = ("uri", "package", "title", "subtitle", "image_url")
 
 POPUP_POSITIONS = (
     "top-left",
@@ -75,10 +97,20 @@ SERVICE_DISMISS_POPUP = "dismiss_popup"
 SERVICE_REFRESH_APPS = "refresh_apps"
 SERVICE_SET_LAUNCHER_MODE = "set_launcher_mode"
 SERVICE_SELECT_PROFILE = "select_profile"
+SERVICE_SHOW_WEB_POPUP = "show_web_popup"
+SERVICE_QUEUE_ADD = "queue_add"
+SERVICE_QUEUE_REMOVE = "queue_remove"
+SERVICE_QUEUE_MOVE = "queue_move"
+SERVICE_QUEUE_CLEAR = "queue_clear"
+SERVICE_QUEUE_PLAY = "queue_play"
+SERVICE_QUEUE_NEXT = "queue_next"
+SERVICE_QUEUE_PAUSE = "queue_pause"
 
+# entry_id plus the standard HA target fields (device_id, area_id, entity_id,
+# floor_id, label_id). A plain string device_id is still accepted.
 _TARGET_SCHEMA = {
     vol.Optional(ATTR_ENTRY_ID): str,
-    vol.Optional(ATTR_DEVICE_ID): str,
+    **cv.TARGET_SERVICE_FIELDS,
 }
 
 
@@ -110,6 +142,32 @@ def _popup_fields(*, include_image: bool) -> dict[Any, Any]:
         fields[vol.Optional("image_url")] = cv.url
         fields[vol.Optional("image_base64")] = cv.string
     return fields
+
+
+def _web_dimension(value: Any) -> int:
+    """Validate a web popup width or height in dp."""
+    return vol.All(
+        vol.Coerce(int),
+        vol.Range(min=WEB_DIMENSION_MIN_DP, max=WEB_DIMENSION_MAX_DP),
+    )(value)
+
+
+QUEUE_ITEM_SCHEMA = vol.Schema(
+    {
+        vol.Required("uri"): cv.string,
+        vol.Optional("package"): cv.string,
+        vol.Optional("title"): cv.string,
+        vol.Optional("subtitle"): cv.string,
+        vol.Optional("image_url"): cv.string,
+    }
+)
+
+
+def _queue_item_id(value: Any) -> str:
+    item_id = cv.string(value).strip()
+    if not item_id:
+        raise vol.Invalid("item_id must not be empty")
+    return item_id
 
 
 def _launch_activity_schema() -> vol.Schema:
@@ -225,6 +283,69 @@ SERVICE_SCHEMAS = {
             vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int,
         }
     ),
+    SERVICE_SHOW_WEB_POPUP: vol.All(
+        _schema(
+            {
+                vol.Exclusive("html", "content"): cv.string,
+                vol.Exclusive("url", "content"): cv.url,
+                vol.Optional("title"): cv.string,
+                vol.Optional("position"): vol.In(POPUP_POSITIONS),
+                vol.Optional("duration_ms"): _duration_ms,
+                vol.Optional("width_dp"): _web_dimension,
+                vol.Optional("height_dp"): _web_dimension,
+                vol.Optional("interactive"): cv.boolean,
+                vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int,
+            }
+        ),
+        vol.Any(
+            vol.Schema({vol.Required("html"): object}, extra=vol.ALLOW_EXTRA),
+            vol.Schema({vol.Required("url"): object}, extra=vol.ALLOW_EXTRA),
+            msg="provide exactly one of html or url",
+        ),
+    ),
+    SERVICE_QUEUE_ADD: vol.All(
+        _schema(
+            {
+                vol.Exclusive("items", "queue_items"): vol.All(
+                    cv.ensure_list, [QUEUE_ITEM_SCHEMA], vol.Length(min=1)
+                ),
+                vol.Exclusive("uri", "queue_items"): cv.string,
+                vol.Optional("package"): cv.string,
+                vol.Optional("title"): cv.string,
+                vol.Optional("subtitle"): cv.string,
+                vol.Optional("image_url"): cv.string,
+                vol.Optional("position"): vol.In(QUEUE_POSITIONS),
+                vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int,
+            }
+        ),
+        vol.Any(
+            vol.Schema({vol.Required("items"): object}, extra=vol.ALLOW_EXTRA),
+            vol.Schema({vol.Required("uri"): object}, extra=vol.ALLOW_EXTRA),
+            msg="provide uri or items",
+        ),
+    ),
+    SERVICE_QUEUE_REMOVE: _schema(
+        {
+            vol.Required("item_id"): _queue_item_id,
+            vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int,
+        }
+    ),
+    SERVICE_QUEUE_MOVE: _schema(
+        {
+            vol.Required("item_id"): _queue_item_id,
+            vol.Required("to_index"): vol.All(vol.Coerce(int), vol.Range(min=0)),
+            vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int,
+        }
+    ),
+    SERVICE_QUEUE_CLEAR: _schema({vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int}),
+    SERVICE_QUEUE_PLAY: _schema(
+        {
+            vol.Optional("item_id"): _queue_item_id,
+            vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int,
+        }
+    ),
+    SERVICE_QUEUE_NEXT: _schema({vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int}),
+    SERVICE_QUEUE_PAUSE: _schema({vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int}),
 }
 
 
@@ -266,6 +387,26 @@ COMMAND_BUILDERS: dict[str, Callable[[ServiceCall], tuple[str, dict[str, Any]]]]
         "select_profile",
         {"profile": call.data["profile"]},
     ),
+    SERVICE_SHOW_WEB_POPUP: lambda call: (
+        "show_web_popup",
+        _web_popup_payload(call),
+    ),
+    SERVICE_QUEUE_ADD: lambda call: ("queue_add", _queue_add_payload(call)),
+    SERVICE_QUEUE_REMOVE: lambda call: (
+        "queue_remove",
+        {"item_id": call.data["item_id"]},
+    ),
+    SERVICE_QUEUE_MOVE: lambda call: (
+        "queue_move",
+        {"item_id": call.data["item_id"], "to_index": call.data["to_index"]},
+    ),
+    SERVICE_QUEUE_CLEAR: lambda call: ("queue_clear", {}),
+    SERVICE_QUEUE_PLAY: lambda call: (
+        "queue_play",
+        {"item_id": call.data["item_id"]} if "item_id" in call.data else {},
+    ),
+    SERVICE_QUEUE_NEXT: lambda call: ("queue_next", {}),
+    SERVICE_QUEUE_PAUSE: lambda call: ("queue_pause", {}),
 }
 
 
@@ -320,19 +461,71 @@ def _popup_payload(call: ServiceCall) -> dict[str, Any]:
     return payload
 
 
+def _web_popup_payload(call: ServiceCall) -> dict[str, Any]:
+    """Build a show_web_popup payload (exactly one of html or url)."""
+    payload: dict[str, Any] = {}
+    for field in (
+        "title",
+        "html",
+        "url",
+        "position",
+        "duration_ms",
+        "width_dp",
+        "height_dp",
+        "interactive",
+    ):
+        if field in call.data:
+            payload[field] = call.data[field]
+    return payload
+
+
+def _queue_add_payload(call: ServiceCall) -> dict[str, Any]:
+    """Build a queue_add payload from an items list or single-item fields."""
+    if "items" in call.data:
+        items = [dict(item) for item in call.data["items"]]
+    else:
+        items = [
+            {field: call.data[field] for field in QUEUE_ITEM_FIELDS if field in call.data}
+        ]
+    payload: dict[str, Any] = {"items": items}
+    if "position" in call.data:
+        payload["position"] = call.data["position"]
+    return payload
+
+
 def async_register_services(hass: HomeAssistant) -> None:
     """Register integration services once."""
     if hass.services.has_service(DOMAIN, SERVICE_LAUNCH_APP):
         return
 
     async def async_handle_service(call: ServiceCall) -> None:
-        runtime = _runtime_from_call(hass, call)
+        runtimes = _runtimes_from_call(hass, call)
         command_type, payload = COMMAND_BUILDERS[call.service](call)
-        await runtime.async_send_command(
-            command_type,
-            payload,
-            timeout_ms=call.data.get(ATTR_TIMEOUT_MS),
+        timeout_ms = call.data.get(ATTR_TIMEOUT_MS)
+        if len(runtimes) == 1:
+            await runtimes[0].async_send_command(
+                command_type, payload, timeout_ms=timeout_ms
+            )
+            return
+
+        results = await asyncio.gather(
+            *(
+                runtime.async_send_command(command_type, payload, timeout_ms=timeout_ms)
+                for runtime in runtimes
+            ),
+            return_exceptions=True,
         )
+        failures: list[str] = []
+        for runtime, result in zip(runtimes, results, strict=True):
+            if isinstance(result, Exception):
+                failures.append(f"{runtime.device_name}: {result}")
+            elif isinstance(result, BaseException):
+                raise result
+        if failures:
+            raise HomeAssistantError(
+                f"{call.service} failed on {len(failures)} of {len(runtimes)} "
+                f"SceneTV launchers: {'; '.join(failures)}"
+            )
 
     for service, schema in SERVICE_SCHEMAS.items():
         hass.services.async_register(DOMAIN, service, async_handle_service, schema=schema)
@@ -344,7 +537,20 @@ def async_unregister_services(hass: HomeAssistant) -> None:
         hass.services.async_remove(DOMAIN, service)
 
 
-def _runtime_from_call(hass: HomeAssistant, call: ServiceCall) -> AndroidTVBridgeRuntime:
+def _has_target(call: ServiceCall) -> bool:
+    """Return whether the call names any HA target (device, area, entity...)."""
+    return any(call.data.get(key) for key in TARGET_KEYS)
+
+
+def _runtimes_from_call(
+    hass: HomeAssistant, call: ServiceCall
+) -> list[AndroidTVBridgeRuntime]:
+    """Resolve the SceneTV launchers a service call targets.
+
+    Order: ``entry_id``, then the HA target (``device_id``, ``area_id``,
+    ``entity_id``, ``floor_id``, ``label_id``), then the single configured
+    launcher when there is exactly one.
+    """
     runtimes: dict[str, AndroidTVBridgeRuntime] = hass.data.get(DOMAIN, {})
     if not runtimes:
         raise HomeAssistantError("No Android TV Bridge launchers are configured")
@@ -352,21 +558,46 @@ def _runtime_from_call(hass: HomeAssistant, call: ServiceCall) -> AndroidTVBridg
     entry_id = call.data.get(ATTR_ENTRY_ID)
     if entry_id:
         if entry_id in runtimes:
-            return runtimes[entry_id]
+            return [runtimes[entry_id]]
         raise HomeAssistantError(f"No Android TV Bridge launcher for entry {entry_id}")
 
-    device_id = call.data.get(ATTR_DEVICE_ID)
-    if device_id:
-        registry = dr.async_get(hass)
-        device = registry.async_get(device_id)
-        if device is None:
-            raise HomeAssistantError(f"No Home Assistant device {device_id}")
-        for config_entry_id in device.config_entries:
-            if config_entry_id in runtimes:
-                return runtimes[config_entry_id]
-        raise HomeAssistantError(f"Device {device_id} is not an Android TV Bridge device")
+    if _has_target(call):
+        matched = _runtimes_for_target(hass, call, runtimes)
+        if not matched:
+            raise HomeAssistantError(
+                "The service target does not include any SceneTV launcher"
+            )
+        return matched
 
     if len(runtimes) == 1:
-        return next(iter(runtimes.values()))
+        return [next(iter(runtimes.values()))]
 
-    raise HomeAssistantError("Specify entry_id or device_id")
+    raise HomeAssistantError(
+        "Several SceneTV launchers are configured: choose a device, area or entity target"
+    )
+
+
+def _runtimes_for_target(
+    hass: HomeAssistant,
+    call: ServiceCall,
+    runtimes: Mapping[str, AndroidTVBridgeRuntime],
+) -> list[AndroidTVBridgeRuntime]:
+    """Map a service target to launcher runtimes via the device registry."""
+    selected = async_extract_referenced_entity_ids(hass, call)
+    device_ids: set[str] = set(selected.referenced_devices)
+    entity_registry = er.async_get(hass)
+    for entity_id in selected.referenced | selected.indirectly_referenced:
+        entity_entry = entity_registry.async_get(entity_id)
+        if entity_entry is not None and entity_entry.device_id:
+            device_ids.add(entity_entry.device_id)
+
+    device_registry = dr.async_get(hass)
+    matched: dict[str, AndroidTVBridgeRuntime] = {}
+    for device_id in device_ids:
+        device = device_registry.async_get(device_id)
+        if device is None:
+            continue
+        for config_entry_id in device.config_entries:
+            if config_entry_id in runtimes:
+                matched[config_entry_id] = runtimes[config_entry_id]
+    return list(matched.values())
