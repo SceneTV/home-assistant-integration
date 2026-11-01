@@ -32,6 +32,9 @@ ATTR_EVENT_TYPE = "event_type"
 
 CONFIGURATION_PATH = "/configure"
 
+CONF_EXPOSED_ACTIONS = "exposed_actions"
+EXPOSED_ACTION_DOMAINS = ("script", "scene")
+
 EVENT_MAP = {
     "foreground_app_changed": f"{DOMAIN}.foreground_app_changed",
     "media_started": f"{DOMAIN}.media_started",
@@ -53,6 +56,7 @@ EVENT_MAP = {
     "queue_item_failed": f"{DOMAIN}.queue_item_failed",
     "queue_paused": f"{DOMAIN}.queue_paused",
     "queue_finished": f"{DOMAIN}.queue_finished",
+    "action_tile_pressed": f"{DOMAIN}.action_tile_pressed",
 }
 """Launcher event types with a dedicated Home Assistant event name.
 

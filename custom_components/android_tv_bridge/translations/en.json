@@ -32,6 +32,20 @@
       "pairing_revoked": "Pairing was revoked."
     }
   },
+  "options": {
+    "step": {
+      "init": {
+        "title": "SceneTV options",
+        "description": "Pick the scripts and scenes this TV may run. They appear in the TV's /configure page when you add a Home Assistant action tile, and pressing a tile runs them. Every press also fires android_tv_bridge.action_tile_pressed for your own automations.",
+        "data": {
+          "exposed_actions": "Actions the TV can run"
+        },
+        "data_description": {
+          "exposed_actions": "Only these scripts and scenes can be run from the TV. Removing one stops its tiles from running it."
+        }
+      }
+    }
+  },
   "entity": {
     "sensor": {
       "foreground_app": { "name": "Foreground app" },
@@ -71,6 +85,40 @@
     }
   },
   "services": {
+    "create_action_tile": {
+      "name": "Create action tile",
+      "description": "Add a Home Assistant action tile to the active SceneTV profile. Pressing it runs the script or scene if it is exposed in the integration options, and always fires android_tv_bridge.action_tile_pressed.",
+      "fields": {
+        "entry_id": {
+          "name": "Config entry ID",
+          "description": "SceneTV config entry to target. Optional when you pick a target or only one launcher is configured."
+        },
+        "action": {
+          "name": "Action",
+          "description": "Script or scene the tile runs. Expose it in the integration options too, or the press only fires the event."
+        },
+        "action_id": {
+          "name": "Action ID",
+          "description": "Custom action id for your own automations, used when no script or scene is picked. Letters, digits, and _ . : - (up to 64)."
+        },
+        "title": {
+          "name": "Title",
+          "description": "Tile title. Defaults to the script or scene name."
+        },
+        "subtitle": {
+          "name": "Subtitle",
+          "description": "Optional second line on the tile."
+        },
+        "image_url": {
+          "name": "Image URL",
+          "description": "Optional image shown on the tile instead of the default icon."
+        },
+        "timeout_ms": {
+          "name": "Timeout",
+          "description": "How long to wait for the launcher, in milliseconds."
+        }
+      }
+    },
     "show_web_popup": {
       "name": "Show web popup",
       "description": "Show an HTML or URL popup on SceneTV. It appears only while the SceneTV launcher is in the foreground. Provide exactly one of html or url.",

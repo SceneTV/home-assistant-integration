@@ -14,13 +14,27 @@ from aiohttp import ClientWebSocketResponse
 from aiohttp import WSMsgType
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
-from homeassistant.core import HomeAssistant
+from homeassistant.const import (
+    CONF_HOST,
+    CONF_NAME,
+    CONF_PORT,
+    EVENT_HOMEASSISTANT_STARTED,
+)
+from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
+from .actions import (
+    ACTION_EVENT_TYPES,
+    BRIDGE_ACTION_RESULT,
+    BRIDGE_SET_HA_ACTIONS,
+    action_catalog,
+    action_result_payload,
+    async_run_exposed_action,
+    exposed_action_ids,
+)
 from .client import (
     AndroidTVBridgeAuthError,
     AndroidTVBridgeClient,
@@ -161,6 +175,7 @@ class AndroidTVBridgeRuntime:
         self._ws_task: asyncio.Task[None] | None = None
         self._websocket: ClientWebSocketResponse | None = None
         self._pending: dict[str, asyncio.Future[dict[str, Any]]] = {}
+        self._unsub_started: CALLBACK_TYPE | None = None
 
         self.client = AndroidTVBridgeClient(
             async_get_clientsession(hass),
@@ -240,6 +255,12 @@ class AndroidTVBridgeRuntime:
             }
         )
 
+        if not self.hass.is_running:
+            # Scripts and scenes may not be loaded yet; resend names once HA is up.
+            self._unsub_started = self.hass.bus.async_listen_once(
+                EVENT_HOMEASSISTANT_STARTED, self._async_on_hass_started
+            )
+
         first_connection: asyncio.Future[None] = self.hass.loop.create_future()
         self._ws_task = self.hass.async_create_task(self._async_listen(first_connection))
         try:
@@ -251,6 +272,9 @@ class AndroidTVBridgeRuntime:
     async def async_stop(self) -> None:
         """Stop the runtime and reject pending commands."""
         self._stopped.set()
+        if self._unsub_started is not None:
+            self._unsub_started()
+            self._unsub_started = None
         if self._ws_task:
             self._ws_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -292,6 +316,10 @@ class AndroidTVBridgeRuntime:
                 self._merge_state({"connection": True})
                 if first_connection is not None and not first_connection.done():
                     first_connection.set_result(None)
+                # The command result arrives through this loop, so send from a task.
+                self.hass.async_create_task(
+                    self.async_push_action_catalog(), f"{DOMAIN} push action catalog"
+                )
                 async for message in websocket:
                     if message.type == WSMsgType.TEXT:
                         await self._handle_ws_payload(message.json())
@@ -333,6 +361,11 @@ class AndroidTVBridgeRuntime:
         if message_type in {"event", "transient_event"}:
             event_type = str(body.get("type") or payload.get("event_type") or "")
             self._fire_event(event_type, dict(body))
+            if event_type in ACTION_EVENT_TYPES:
+                self.hass.async_create_task(
+                    self._async_handle_action(dict(body)),
+                    f"{DOMAIN} action {body.get('action_id')}",
+                )
             return
 
         if message_type in {"command_result", "command_ack"}:
@@ -343,6 +376,31 @@ class AndroidTVBridgeRuntime:
             if command_id in self._pending and message_type == "command_result":
                 self._pending.pop(command_id).set_result(result)
             self._fire_event("command_result", result)
+
+    async def _async_on_hass_started(self, _event: Event) -> None:
+        self._unsub_started = None
+        if self.connected:
+            await self.async_push_action_catalog()
+
+    async def async_push_action_catalog(self) -> None:
+        """Send the exposed scripts and scenes to the launcher's tile picker."""
+        catalog = action_catalog(self.hass, exposed_action_ids(self.entry))
+        try:
+            await self.async_send_command(BRIDGE_SET_HA_ACTIONS, {"actions": catalog})
+        except HomeAssistantError as err:
+            # Launchers without action tiles answer "unsupported_command".
+            _LOGGER.debug("Could not send action tiles to the launcher: %s", err)
+
+    async def _async_handle_action(self, payload: dict[str, Any]) -> None:
+        """Run an exposed action for a tile or popup press and report back to tiles."""
+        result = await async_run_exposed_action(self.hass, self.entry, payload)
+        command = action_result_payload(payload, result)
+        if command is None:
+            return
+        try:
+            await self.async_send_command(BRIDGE_ACTION_RESULT, command)
+        except HomeAssistantError as err:
+            _LOGGER.debug("Could not report the action result to the launcher: %s", err)
 
     def _merge_state(self, update: Mapping[str, Any]) -> None:
         current = self.coordinator.data or {}

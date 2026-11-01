@@ -10,16 +10,18 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
 from homeassistant.core import callback
-from homeassistant.helpers import instance_id
+from homeassistant.helpers import instance_id, selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .client import AndroidTVBridgeClient, AndroidTVBridgeError
 from .const import (
     CONF_API_VERSION,
+    CONF_EXPOSED_ACTIONS,
     CONF_TOKEN,
     DEFAULT_API_VERSION,
     DEFAULT_PORT,
     DOMAIN,
+    EXPOSED_ACTION_DOMAINS,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -265,5 +267,25 @@ class AndroidTVBridgeOptionsFlow(config_entries.OptionsFlow):
     ) -> config_entries.ConfigFlowResult:
         """Manage integration options."""
         if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
-        return self.async_show_form(step_id="init", data_schema=vol.Schema({}))
+            return self.async_create_entry(
+                title="",
+                data={
+                    **self._config_entry.options,
+                    CONF_EXPOSED_ACTIONS: list(user_input.get(CONF_EXPOSED_ACTIONS) or []),
+                },
+            )
+        current = self._config_entry.options.get(CONF_EXPOSED_ACTIONS) or []
+        return self.async_show_form(
+            step_id="init",
+            data_schema=vol.Schema(
+                {
+                    vol.Optional(
+                        CONF_EXPOSED_ACTIONS, default=list(current)
+                    ): selector.EntitySelector(
+                        selector.EntitySelectorConfig(
+                            domain=list(EXPOSED_ACTION_DOMAINS), multiple=True
+                        )
+                    ),
+                }
+            ),
+        )
