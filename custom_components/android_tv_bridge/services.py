@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Callable, Mapping
+import re
 from typing import Any
+from uuid import uuid4
 
 import voluptuous as vol
 
@@ -15,7 +17,12 @@ from homeassistant.const import (
     ATTR_FLOOR_ID,
     ATTR_LABEL_ID,
 )
-from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.core import (
+    HomeAssistant,
+    ServiceCall,
+    ServiceResponse,
+    SupportsResponse,
+)
 from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers import device_registry as dr
@@ -67,6 +74,11 @@ POPUP_COLORS = (
     "pink",
 )
 POPUP_TRANSPARENCIES = ("0%", "25%", "50%", "75%", "100%")
+POPUP_MAX_ACTIONS = 3
+POPUP_ACTION_LABEL_MAX = 40
+POPUP_ACTION_STYLES = ("default", "primary", "destructive")
+POPUP_RESERVED_ACTION_ID = "dismiss"
+_POPUP_TOKEN = re.compile(r"^[A-Za-z0-9_.:-]{1,64}$")
 
 SUPPORTED_KEY_EVENTS = (
     "DPAD_UP",
@@ -123,6 +135,49 @@ def _duration_ms(value: Any) -> int:
     return vol.All(cv.positive_int, vol.Range(min=1000, max=600000))(value)
 
 
+def _popup_token(value: Any) -> str:
+    """Validate a popup_id or action id: 1-64 of letters, digits and _ . : -."""
+    text = cv.string(value).strip()
+    if not _POPUP_TOKEN.match(text):
+        raise vol.Invalid(
+            "must be 1 to 64 letters, digits or the characters _ . : -"
+        )
+    return text
+
+
+def _popup_action_id(value: Any) -> str:
+    text = _popup_token(value)
+    if text == POPUP_RESERVED_ACTION_ID:
+        raise vol.Invalid('"dismiss" is reserved for the built-in Dismiss button')
+    return text
+
+
+_POPUP_LABEL = vol.All(cv.string, vol.Length(min=1, max=POPUP_ACTION_LABEL_MAX))
+
+_POPUP_ACTION_SCHEMA = vol.Schema(
+    {
+        vol.Required("id"): _popup_action_id,
+        vol.Optional("label"): _POPUP_LABEL,
+        vol.Optional("style"): vol.All(vol.Lower, vol.In(POPUP_ACTION_STYLES)),
+        vol.Optional("default"): cv.boolean,
+        vol.Optional("data"): dict,
+    }
+)
+
+
+def _popup_actions(value: Any) -> list[dict[str, Any]]:
+    """Validate popup buttons: at most three, unique ids, at most one default."""
+    actions = vol.All(cv.ensure_list, [_POPUP_ACTION_SCHEMA])(value)
+    if len(actions) > POPUP_MAX_ACTIONS:
+        raise vol.Invalid(f"at most {POPUP_MAX_ACTIONS} actions are allowed")
+    ids = [action["id"] for action in actions]
+    if len(set(ids)) != len(ids):
+        raise vol.Invalid("action ids must be unique")
+    if sum(1 for action in actions if action.get("default")) > 1:
+        raise vol.Invalid("only one action can be the default")
+    return actions
+
+
 def _popup_fields(*, include_image: bool) -> dict[Any, Any]:
     """Return shared popup service schema fields."""
     fields: dict[Any, Any] = {
@@ -136,6 +191,9 @@ def _popup_fields(*, include_image: bool) -> dict[Any, Any]:
         vol.Optional("icon_url"): cv.url,
         vol.Optional("icon_base64"): cv.string,
         vol.Optional("duration_ms"): _duration_ms,
+        vol.Optional("actions"): _popup_actions,
+        vol.Optional("popup_id"): _popup_token,
+        vol.Optional("dismiss_label"): _POPUP_LABEL,
         vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int,
     }
     if include_image:
@@ -349,6 +407,10 @@ SERVICE_SCHEMAS = {
 }
 
 
+# Services that return {"popup_id": ...} to a script using response_variable.
+RESPONSE_SERVICES = frozenset({SERVICE_SHOW_POPUP, SERVICE_SHOW_IMAGE})
+
+
 COMMAND_BUILDERS: dict[str, Callable[[ServiceCall], tuple[str, dict[str, Any]]]] = {
     SERVICE_LAUNCH_APP: lambda call: ("launch_app", {"package": call.data["package"]}),
     SERVICE_LAUNCH_ACTIVITY: lambda call: (
@@ -455,9 +517,16 @@ def _popup_payload(call: ServiceCall) -> dict[str, Any]:
         "image_url",
         "image_base64",
         "duration_ms",
+        "dismiss_label",
     ):
         if field in call.data:
             payload[field] = call.data[field]
+    if call.data.get("actions"):
+        payload["actions"] = [dict(action) for action in call.data["actions"]]
+    # Always send a popup_id, generated here when the caller did not pass one, so
+    # every targeted TV uses the same id and the service can return it. Scripts
+    # then match android_tv_bridge.popup_action / popup_dismissed on it.
+    payload["popup_id"] = call.data.get("popup_id") or uuid4().hex
     return payload
 
 
@@ -498,15 +567,18 @@ def async_register_services(hass: HomeAssistant) -> None:
     if hass.services.has_service(DOMAIN, SERVICE_LAUNCH_APP):
         return
 
-    async def async_handle_service(call: ServiceCall) -> None:
+    async def async_handle_service(call: ServiceCall) -> ServiceResponse:
         runtimes = _runtimes_from_call(hass, call)
         command_type, payload = COMMAND_BUILDERS[call.service](call)
         timeout_ms = call.data.get(ATTR_TIMEOUT_MS)
+        response: ServiceResponse = None
+        if call.return_response and "popup_id" in payload:
+            response = {"popup_id": payload["popup_id"]}
         if len(runtimes) == 1:
             await runtimes[0].async_send_command(
                 command_type, payload, timeout_ms=timeout_ms
             )
-            return
+            return response
 
         results = await asyncio.gather(
             *(
@@ -526,9 +598,20 @@ def async_register_services(hass: HomeAssistant) -> None:
                 f"{call.service} failed on {len(failures)} of {len(runtimes)} "
                 f"SceneTV launchers: {'; '.join(failures)}"
             )
+        return response
 
     for service, schema in SERVICE_SCHEMAS.items():
-        hass.services.async_register(DOMAIN, service, async_handle_service, schema=schema)
+        hass.services.async_register(
+            DOMAIN,
+            service,
+            async_handle_service,
+            schema=schema,
+            supports_response=(
+                SupportsResponse.OPTIONAL
+                if service in RESPONSE_SERVICES
+                else SupportsResponse.NONE
+            ),
+        )
 
 
 def async_unregister_services(hass: HomeAssistant) -> None:

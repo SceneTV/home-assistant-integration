@@ -192,6 +192,63 @@ tap_action:
     duration_ms: 5000
 ```
 
+### Popup buttons (actionable popups)
+
+`show_popup` and `show_image` accept up to three `actions`. The TV shows them as
+buttons next to a built-in **Dismiss** button, over whatever app is playing. The
+remote's D-pad moves between them, OK presses one, and Back always closes the
+popup. Each press fires `android_tv_bridge.popup_action`.
+
+| Action field | Meaning |
+| --- | --- |
+| `id` | Required. 1 to 64 letters, digits or `_ . : -`. `dismiss` is reserved. Sent back as `action_id`. |
+| `label` | Button text, up to 40 characters. Defaults to the id. |
+| `style` | `default`, `primary` or `destructive` (red). |
+| `default` | `true` on at most one action to give it focus. Otherwise Dismiss has focus, so a stray OK press never fires "Unlock". |
+| `data` | Optional object, echoed back unchanged in the event. |
+
+Other fields: `dismiss_label` renames the Dismiss button, and `popup_id` sets
+the id that every popup event carries. When you leave `popup_id` out, the
+integration generates one and returns it as a response, so a script can wait
+for the answer to *this* popup. Popups with buttons take remote focus, and
+`duration_ms` defaults to 30000 for them.
+
+```yaml
+sequence:
+  - action: android_tv_bridge.show_image
+    target:
+      device_id: your_home_assistant_device_id
+    data:
+      title: Front door
+      image_url: https://example.local/doorbell.jpg
+      actions:
+        - id: unlock
+          label: Unlock
+          style: destructive
+        - id: talk
+          label: Talk
+    response_variable: popup
+  - wait_for_trigger:
+      - trigger: event
+        event_type: android_tv_bridge.popup_action
+        event_data:
+          popup_id: "{{ popup.popup_id }}"
+          action_id: unlock
+    timeout: "00:00:30"
+    continue_on_timeout: false
+  - action: lock.unlock
+    target:
+      entity_id: lock.front_door
+```
+
+`popup_action` carries `action_id`, `action_label`, `popup_id`, `source`
+(`popup`), `source_id` (same as `popup_id`), `profile_id`, `profile_name` and
+`data`. Back, Dismiss, the timeout, `dismiss_popup` and a newer popup do not
+fire `popup_action`; they fire `popup_dismissed` with `popup_id` and a `reason`
+of `user`, `expired`, `dismissed` or `replaced` (`action` follows a button
+press). Launchers that support buttons report `capabilities.popups.actions:
+true`; older launchers ignore `actions` and show a plain popup.
+
 ## Web popups
 
 `android_tv_bridge.show_web_popup` shows inline HTML or a web page. Give exactly
@@ -253,7 +310,8 @@ The integration fires these Home Assistant events:
 | --- | --- |
 | `android_tv_bridge.foreground_app_changed` | The foreground app changed |
 | `android_tv_bridge.media_started`, `media_paused`, `media_stopped`, `media_changed` | Media session changes |
-| `android_tv_bridge.popup_shown`, `popup_dismissed` | A popup appeared or closed |
+| `android_tv_bridge.popup_shown`, `popup_dismissed` | A popup appeared or closed (`popup_id`; `popup_dismissed` also has `reason`) |
+| `android_tv_bridge.popup_action` | A popup button was pressed (`action_id`, `popup_id`, `data`, see [Popup buttons](#popup-buttons-actionable-popups)) |
 | `android_tv_bridge.profile_changed` | The active SceneTV profile changed |
 | `android_tv_bridge.command_result` | A command finished |
 | `android_tv_bridge.web_action` | A web card or web popup called `SceneTV.postAction` (`surface`, `surface_id`, `action`, `data`) |
