@@ -33,6 +33,28 @@ Initial scope:
 - One Home Assistant device per paired launcher
 - Authenticated local WebSocket connection
 - Media player, sensors, binary sensors, buttons, launcher mode select, notify entity, services, and bridge events
+- The device page's **Visit** link opens the launcher's configuration portal (`http://<tv>:8765/configure`)
+
+## Targeting TVs
+
+Every `android_tv_bridge.*` service accepts a standard Home Assistant
+`target`: devices, areas, entities (any SceneTV entity, such as the media
+player), floors or labels. One call can reach several TVs; the command is sent
+to all of them in parallel, and the call fails afterwards with a list of the
+TVs that did not accept it.
+
+```yaml
+action: android_tv_bridge.show_popup
+target:
+  area_id: living_room
+data:
+  title: Dinner
+  text: Food is ready
+```
+
+Older forms keep working: `data: device_id: <ha_device_id>` (a single string)
+and `data: entry_id: <config_entry_id>`. When only one TV is configured, no
+target is needed.
 
 ## Media controls
 
@@ -49,6 +71,15 @@ entity. Standard Home Assistant media actions map to the launcher
 
 The lower-level `android_tv_bridge.media_command` service also accepts `rewind`
 and `fast_forward` for automations that need those remote-control keys.
+
+### Volume
+
+When the launcher reports volume (`volume_level`, `volume_max`,
+`volume_muted` in its state), the media player also supports
+`media_player.volume_up`, `volume_down`, `volume_mute` and `volume_set`. These
+send the launcher `volume_command` (`up`, `down`, `mute`, `unmute`). The
+launcher only changes volume in steps, so `volume_set` sends as many `up` or
+`down` steps as needed to reach the requested level.
 
 ## Key events
 
@@ -159,6 +190,109 @@ tap_action:
     title: SceneTV
     text: Test notification from the dashboard
     duration_ms: 5000
+```
+
+## Web popups
+
+`android_tv_bridge.show_web_popup` shows inline HTML or a web page. Give exactly
+one of `html` or `url` (HTTPS, or HTTP on a private or local address). This
+popup only appears while the SceneTV launcher is in the foreground; use
+`show_popup` or `show_image` for popups over other apps. Requires the launcher's
+Home Assistant popups setting to be on.
+
+```yaml
+action: android_tv_bridge.show_web_popup
+target:
+  device_id: your_home_assistant_device_id
+data:
+  title: Laundry
+  html: "<h1>The washer is done</h1>"
+  position: center
+  duration_ms: 10000
+  width_dp: 600
+  interactive: false
+```
+
+With `interactive: true` the remote can focus the page, and the page can call
+`SceneTV.postAction(...)`. Each action arrives in Home Assistant as an
+`android_tv_bridge.web_action` event.
+
+## Media queue
+
+Queue services drive the launcher's media queue:
+
+| Service | Fields |
+| --- | --- |
+| `android_tv_bridge.queue_add` | `uri` (plus optional `package`, `title`, `subtitle`, `image_url`) or `items` (a list of those), optional `position`: `end` or `next` |
+| `android_tv_bridge.queue_remove` | `item_id` |
+| `android_tv_bridge.queue_move` | `item_id`, `to_index` |
+| `android_tv_bridge.queue_clear` | none |
+| `android_tv_bridge.queue_play` | optional `item_id` (otherwise resume) |
+| `android_tv_bridge.queue_next` | none |
+| `android_tv_bridge.queue_pause` | none |
+
+```yaml
+action: android_tv_bridge.queue_add
+target:
+  device_id: your_home_assistant_device_id
+data:
+  uri: https://www.youtube.com/watch?v=dQw4w9WgXcQ
+  package: com.google.android.youtube.tv
+  title: Tonight's first video
+  position: next
+```
+
+The current queue appears in the entity state data under `queue`. Launchers
+without queue support reject these services as unsupported.
+
+## Events
+
+The integration fires these Home Assistant events:
+
+| Event | When |
+| --- | --- |
+| `android_tv_bridge.foreground_app_changed` | The foreground app changed |
+| `android_tv_bridge.media_started`, `media_paused`, `media_stopped`, `media_changed` | Media session changes |
+| `android_tv_bridge.popup_shown`, `popup_dismissed` | A popup appeared or closed |
+| `android_tv_bridge.profile_changed` | The active SceneTV profile changed |
+| `android_tv_bridge.command_result` | A command finished |
+| `android_tv_bridge.web_action` | A web card or web popup called `SceneTV.postAction` (`surface`, `surface_id`, `action`, `data`) |
+| `android_tv_bridge.home_config_changed` | The launcher home screen layout changed |
+| `android_tv_bridge.queue_item_started`, `queue_item_finished`, `queue_item_failed` | A queue item changed state (`item_id`) |
+| `android_tv_bridge.queue_paused` | The queue paused (`reason`, for example `user_input` or `foreground_changed`) |
+| `android_tv_bridge.queue_finished` | The last queue item finished |
+| `android_tv_bridge.event` | Any other launcher event; the launcher's event name is in `event_type` |
+
+`remote_key_pressed`, `launcher_focused`, `launcher_item_selected` and
+`idle_changed` are still mapped but the launcher does not send them yet.
+
+Every event carries:
+
+- `entry_id`: the config entry id.
+- `device_id`: the launcher's own id (unchanged, so existing automations keep
+  working). This is **not** a Home Assistant device id.
+- `ha_device_id`: the Home Assistant device-registry id, for matching against
+  `device_id` targets and device pages.
+
+```yaml
+triggers:
+  - trigger: event
+    event_type: android_tv_bridge.web_action
+    event_data:
+      action: lights_off
+actions:
+  - action: light.turn_off
+    target:
+      area_id: living_room
+```
+
+## Development
+
+Tests use `pytest-homeassistant-custom-component`:
+
+```bash
+pip install -r requirements_test.txt
+pytest
 ```
 
 ## Development status
