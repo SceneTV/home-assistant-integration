@@ -69,5 +69,57 @@
       "launcher_mode": { "name": "Launcher mode" },
       "active_profile": { "name": "Active profile" }
     }
+  },
+  "services": {
+    "show_camera": {
+      "name": "Show camera popup",
+      "description": "Show a snapshot popup from a camera configured on SceneTV. Requires a launcher that advertises show_camera.",
+      "fields": {
+        "entry_id": {
+          "name": "Config entry ID",
+          "description": "SceneTV config entry to target. Optional when only one launcher is configured."
+        },
+        "device_id": {
+          "name": "Device",
+          "description": "SceneTV device to target. Optional when only one launcher is configured."
+        },
+        "camera": {
+          "name": "Camera",
+          "description": "Camera id configured in SceneTV camera settings. Stream URLs and credentials stay on the TV."
+        },
+        "title": {
+          "name": "Title",
+          "description": "Optional popup title. Defaults to the camera name on the TV."
+        },
+        "position": {
+          "name": "Position",
+          "description": "Where the popup appears on screen."
+        },
+        "size": {
+          "name": "Size",
+          "description": "Popup size."
+        },
+        "duration_ms": {
+          "name": "Duration",
+          "description": "How long the popup stays visible, in milliseconds (1000 to 120000)."
+        },
+        "interrupt": {
+          "name": "Interrupt",
+          "description": "Take remote focus so OK or Back dismisses the popup."
+        },
+        "profiles": {
+          "name": "Profiles",
+          "description": "SceneTV profile ids or names that may see this popup. Overrides the camera's popup profiles on the TV."
+        },
+        "pause_media": {
+          "name": "Pause media",
+          "description": "Override whether SceneTV pauses playing media while the popup is shown."
+        },
+        "timeout_ms": {
+          "name": "Command timeout",
+          "description": "How long to wait for the launcher to answer, in milliseconds."
+        }
+      }
+    }
   }
 }

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
+import logging
 from typing import Any
 
 import voluptuous as vol
@@ -21,6 +22,8 @@ from .media_contract import (
 )
 from .runtime import AndroidTVBridgeRuntime
 
+_LOGGER = logging.getLogger(__name__)
+
 ATTR_ENTRY_ID = "entry_id"
 ATTR_DEVICE_ID = "device_id"
 ATTR_TIMEOUT_MS = "timeout_ms"
@@ -32,6 +35,13 @@ POPUP_POSITIONS = (
     "bottom-right",
     "center",
 )
+CAMERA_POPUP_SIZES = ("small", "medium", "large")
+CAMERA_ERROR_MESSAGES = {
+    "unknown_camera": "Camera {camera} is not configured on this SceneTV launcher",
+    "popups_disabled": "Home Assistant popups are disabled on this SceneTV launcher",
+    "grab_failed": "SceneTV could not get a snapshot from camera {camera}",
+}
+CAMERA_SKIP_REASONS = ("profile_not_targeted",)
 POPUP_FONT_SIZES = ("small", "medium", "large", "max")
 POPUP_COLORS = (
     "grey",
@@ -71,6 +81,7 @@ SERVICE_SEND_KEY = "send_key"
 SERVICE_MEDIA_COMMAND = "media_command"
 SERVICE_SHOW_POPUP = "show_popup"
 SERVICE_SHOW_IMAGE = "show_image"
+SERVICE_SHOW_CAMERA = "show_camera"
 SERVICE_DISMISS_POPUP = "dismiss_popup"
 SERVICE_REFRESH_APPS = "refresh_apps"
 SERVICE_SET_LAUNCHER_MODE = "set_launcher_mode"
@@ -89,6 +100,25 @@ def _schema(fields: Mapping[Any, Any]) -> vol.Schema:
 def _duration_ms(value: Any) -> int:
     """Validate a popup duration."""
     return vol.All(cv.positive_int, vol.Range(min=1000, max=600000))(value)
+
+
+def _camera_duration_ms(value: Any) -> int:
+    """Validate a camera popup duration."""
+    return vol.All(cv.positive_int, vol.Range(min=1000, max=120000))(value)
+
+
+def _camera_id(value: Any) -> str:
+    """Validate a camera id configured on the TV."""
+    camera = cv.string(value).strip()
+    if not camera:
+        raise vol.Invalid("camera must not be empty")
+    return camera
+
+
+def _profile_list(value: Any) -> list[str]:
+    """Validate a list of SceneTV profile ids or names."""
+    profiles = [cv.string(item).strip() for item in cv.ensure_list(value)]
+    return [profile for profile in profiles if profile]
 
 
 def _popup_fields(*, include_image: bool) -> dict[Any, Any]:
@@ -211,6 +241,19 @@ SERVICE_SCHEMAS = {
             vol.Schema({vol.Required("image_base64"): object}, extra=vol.ALLOW_EXTRA),
         ),
     ),
+    SERVICE_SHOW_CAMERA: _schema(
+        {
+            vol.Required("camera"): _camera_id,
+            vol.Optional("title"): cv.string,
+            vol.Optional("position"): vol.In(POPUP_POSITIONS),
+            vol.Optional("size"): vol.In(CAMERA_POPUP_SIZES),
+            vol.Optional("duration_ms"): _camera_duration_ms,
+            vol.Optional("interrupt"): cv.boolean,
+            vol.Optional("profiles"): _profile_list,
+            vol.Optional("pause_media"): cv.boolean,
+            vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int,
+        }
+    ),
     SERVICE_DISMISS_POPUP: _schema({vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int}),
     SERVICE_REFRESH_APPS: _schema({vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int}),
     SERVICE_SET_LAUNCHER_MODE: _schema(
@@ -255,6 +298,10 @@ COMMAND_BUILDERS: dict[str, Callable[[ServiceCall], tuple[str, dict[str, Any]]]]
     SERVICE_SHOW_IMAGE: lambda call: (
         "show_image",
         _popup_payload(call),
+    ),
+    SERVICE_SHOW_CAMERA: lambda call: (
+        "show_camera",
+        _camera_payload(call),
     ),
     SERVICE_DISMISS_POPUP: lambda call: ("dismiss_popup", {}),
     SERVICE_REFRESH_APPS: lambda call: ("refresh_apps", {}),
@@ -320,6 +367,74 @@ def _popup_payload(call: ServiceCall) -> dict[str, Any]:
     return payload
 
 
+def _camera_payload(call: ServiceCall) -> dict[str, Any]:
+    """Build a show_camera command payload from optional service fields."""
+    payload: dict[str, Any] = {"camera": call.data["camera"]}
+    for field in (
+        "title",
+        "position",
+        "size",
+        "duration_ms",
+        "interrupt",
+        "pause_media",
+    ):
+        if field in call.data:
+            payload[field] = call.data[field]
+    if call.data.get("profiles"):
+        payload["profiles"] = call.data["profiles"]
+    return payload
+
+
+def _supports_command(runtime: AndroidTVBridgeRuntime, command_type: str) -> bool:
+    """Return whether the launcher advertises a bridge command."""
+    for source in (runtime.coordinator.data or {}, runtime.metadata):
+        capabilities = source.get("capabilities")
+        if isinstance(capabilities, Mapping):
+            commands = capabilities.get("commands")
+            if isinstance(commands, list):
+                return command_type in commands
+    return False
+
+
+def _camera_skip_reason(result: Mapping[str, Any]) -> str | None:
+    """Return why the launcher skipped a camera popup, if it did."""
+    for key in ("reason", "result", "skipped", "error"):
+        value = result.get(key)
+        if isinstance(value, str) and value in CAMERA_SKIP_REASONS:
+            return value
+    if result.get("status") == "skipped" or result.get("skipped") is True:
+        return str(result.get("reason") or "skipped")
+    return None
+
+
+async def _async_show_camera(runtime: AndroidTVBridgeRuntime, call: ServiceCall) -> None:
+    """Send show_camera, mapping launcher error codes to clear messages."""
+    if not _supports_command(runtime, "show_camera"):
+        raise HomeAssistantError(
+            f"{runtime.device_name} does not support camera popups; update SceneTV"
+        )
+    camera = call.data["camera"]
+    command_type, payload = COMMAND_BUILDERS[SERVICE_SHOW_CAMERA](call)
+    try:
+        result = await runtime.async_send_command(
+            command_type,
+            payload,
+            timeout_ms=call.data.get(ATTR_TIMEOUT_MS),
+        )
+    except HomeAssistantError as err:
+        code = str(err).split(":", 1)[0].strip()
+        if code in CAMERA_SKIP_REASONS:
+            _LOGGER.debug("Camera popup %s skipped by launcher: %s", camera, code)
+            return
+        if code in CAMERA_ERROR_MESSAGES:
+            raise HomeAssistantError(
+                CAMERA_ERROR_MESSAGES[code].format(camera=camera)
+            ) from err
+        raise
+    if reason := _camera_skip_reason(result):
+        _LOGGER.debug("Camera popup %s skipped by launcher: %s", camera, reason)
+
+
 def async_register_services(hass: HomeAssistant) -> None:
     """Register integration services once."""
     if hass.services.has_service(DOMAIN, SERVICE_LAUNCH_APP):
@@ -327,6 +442,9 @@ def async_register_services(hass: HomeAssistant) -> None:
 
     async def async_handle_service(call: ServiceCall) -> None:
         runtime = _runtime_from_call(hass, call)
+        if call.service == SERVICE_SHOW_CAMERA:
+            await _async_show_camera(runtime, call)
+            return
         command_type, payload = COMMAND_BUILDERS[call.service](call)
         await runtime.async_send_command(
             command_type,
