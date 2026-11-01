@@ -308,3 +308,7 @@ pytest
 ## Development status
 
 The Android launcher API is still being implemented. Endpoint paths and payload shapes are isolated in `custom_components/android_tv_bridge/client.py` and `runtime.py` so the integration can track the launcher protocol as it stabilizes.
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE).
