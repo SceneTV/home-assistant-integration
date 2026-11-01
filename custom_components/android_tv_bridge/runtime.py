@@ -17,6 +17,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
@@ -27,15 +28,25 @@ from .client import (
     AndroidTVBridgeError,
 )
 from .const import (
+    ATTR_EVENT_TYPE,
+    ATTR_HA_DEVICE_ID,
     CONF_API_VERSION,
     CONF_TOKEN,
+    CONFIGURATION_PATH,
     DEFAULT_API_VERSION,
     DEFAULT_TIMEOUT,
     DOMAIN,
     EVENT_COMMAND_RESULT,
+    EVENT_GENERIC,
     EVENT_MAP,
 )
-from .media_contract import BRIDGE_MEDIA_COMMAND, media_command_payload, milliseconds_to_seconds
+from .media_contract import (
+    BRIDGE_MEDIA_COMMAND,
+    BRIDGE_VOLUME_COMMAND,
+    media_command_payload,
+    milliseconds_to_seconds,
+    volume_command_payload,
+)
 
 _LOGGER = logging.getLogger(__name__)
 _UPDATE_INTERVAL = timedelta(seconds=30)
@@ -191,7 +202,30 @@ class AndroidTVBridgeRuntime:
             "name": self.device_name,
             "model": self.metadata.get("model") or "Android TV Launcher",
             "sw_version": self.metadata.get("app_version"),
-            "configuration_url": f"http://{self.client.host}:{self.client.port}",
+            "configuration_url": (
+                f"http://{self.client.host}:{self.client.port}{CONFIGURATION_PATH}"
+            ),
+        }
+
+    @property
+    def ha_device_id(self) -> str | None:
+        """Return the Home Assistant device-registry id for this launcher."""
+        device = dr.async_get(self.hass).async_get_device(
+            identifiers={(DOMAIN, self.device_id)}
+        )
+        return device.id if device is not None else None
+
+    def _event_data(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """Return the common event data for a launcher event.
+
+        ``device_id`` is the launcher's own id (kept for existing automations);
+        ``ha_device_id`` is the Home Assistant device-registry id.
+        """
+        return {
+            "entry_id": self.entry.entry_id,
+            "device_id": self.device_id,
+            **payload,
+            ATTR_HA_DEVICE_ID: self.ha_device_id,
         }
 
     async def async_start(self) -> None:
@@ -315,17 +349,14 @@ class AndroidTVBridgeRuntime:
         self.coordinator.async_set_updated_data({**current, **dict(update)})
 
     def _fire_event(self, event_type: str, payload: dict[str, Any]) -> None:
+        if not event_type:
+            _LOGGER.debug("Ignoring launcher event without a type: %r", payload)
+            return
         event_name = EVENT_MAP.get(event_type)
         if event_name is None:
-            return
-        self.hass.bus.async_fire(
-            event_name,
-            {
-                "entry_id": self.entry.entry_id,
-                "device_id": self.device_id,
-                **payload,
-            },
-        )
+            event_name = EVENT_GENERIC
+            payload = {**payload, ATTR_EVENT_TYPE: event_type}
+        self.hass.bus.async_fire(event_name, self._event_data(payload))
 
     async def async_send_command(
         self,
@@ -367,18 +398,18 @@ class AndroidTVBridgeRuntime:
                 "status": "timed_out",
                 "error": "Timed out waiting for command result",
             }
-            self.hass.bus.async_fire(
-                EVENT_COMMAND_RESULT,
-                {
-                    "entry_id": self.entry.entry_id,
-                    "device_id": self.device_id,
-                    **result,
-                },
-            )
+            self.hass.bus.async_fire(EVENT_COMMAND_RESULT, self._event_data(result))
             raise HomeAssistantError(result["error"]) from err
         if result.get("status") in {"failed", "rejected", "unsupported", "timed_out"}:
             raise HomeAssistantError(str(result.get("error") or result["status"]))
         return result
+
+    async def async_volume_command(self, command: str) -> dict[str, Any]:
+        """Send a volume command (up, down, mute, unmute, toggle_mute)."""
+        return await self.async_send_command(
+            BRIDGE_VOLUME_COMMAND,
+            volume_command_payload(command),
+        )
 
     async def async_media_command(self, command: str) -> dict[str, Any]:
         """Send a media control command to the launcher."""
