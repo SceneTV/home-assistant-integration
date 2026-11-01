@@ -36,10 +36,14 @@ POPUP_POSITIONS = (
     "center",
 )
 CAMERA_POPUP_SIZES = ("small", "medium", "large")
+CAMERA_DEFAULT_TIMEOUT_MS = 12000
 CAMERA_ERROR_MESSAGES = {
     "unknown_camera": "Camera {camera} is not configured on this SceneTV launcher",
+    "camera_disabled": "Camera {camera} is disabled on this SceneTV launcher",
     "popups_disabled": "Home Assistant popups are disabled on this SceneTV launcher",
+    "overlay_permission_required": "SceneTV is not allowed to draw over other apps",
     "grab_failed": "SceneTV could not get a snapshot from camera {camera}",
+    "invalid_payload": "SceneTV rejected the camera popup request",
 }
 CAMERA_SKIP_REASONS = ("profile_not_targeted",)
 POPUP_FONT_SIZES = ("small", "medium", "large", "max")
@@ -100,11 +104,6 @@ def _schema(fields: Mapping[Any, Any]) -> vol.Schema:
 def _duration_ms(value: Any) -> int:
     """Validate a popup duration."""
     return vol.All(cv.positive_int, vol.Range(min=1000, max=600000))(value)
-
-
-def _camera_duration_ms(value: Any) -> int:
-    """Validate a camera popup duration."""
-    return vol.All(cv.positive_int, vol.Range(min=1000, max=120000))(value)
 
 
 def _camera_id(value: Any) -> str:
@@ -247,7 +246,7 @@ SERVICE_SCHEMAS = {
             vol.Optional("title"): cv.string,
             vol.Optional("position"): vol.In(POPUP_POSITIONS),
             vol.Optional("size"): vol.In(CAMERA_POPUP_SIZES),
-            vol.Optional("duration_ms"): _camera_duration_ms,
+            vol.Optional("duration_ms"): _duration_ms,
             vol.Optional("interrupt"): cv.boolean,
             vol.Optional("profiles"): _profile_list,
             vol.Optional("pause_media"): cv.boolean,
@@ -398,12 +397,14 @@ def _supports_command(runtime: AndroidTVBridgeRuntime, command_type: str) -> boo
 
 def _camera_skip_reason(result: Mapping[str, Any]) -> str | None:
     """Return why the launcher skipped a camera popup, if it did."""
-    for key in ("reason", "result", "skipped", "error"):
-        value = result.get(key)
-        if isinstance(value, str) and value in CAMERA_SKIP_REASONS:
-            return value
-    if result.get("status") == "skipped" or result.get("skipped") is True:
-        return str(result.get("reason") or "skipped")
+    details = result.get("result")
+    if not isinstance(details, Mapping):
+        details = result
+    skipped = details.get("skipped")
+    if isinstance(skipped, str) and skipped:
+        return skipped
+    if skipped is True or result.get("status") == "skipped":
+        return str(details.get("reason") or "skipped")
     return None
 
 
@@ -419,7 +420,7 @@ async def _async_show_camera(runtime: AndroidTVBridgeRuntime, call: ServiceCall)
         result = await runtime.async_send_command(
             command_type,
             payload,
-            timeout_ms=call.data.get(ATTR_TIMEOUT_MS),
+            timeout_ms=call.data.get(ATTR_TIMEOUT_MS, CAMERA_DEFAULT_TIMEOUT_MS),
         )
     except HomeAssistantError as err:
         code = str(err).split(":", 1)[0].strip()

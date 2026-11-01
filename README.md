@@ -179,7 +179,7 @@ older launchers get a clear error instead of a silent no-op.
 | `title` | camera name | Optional popup title |
 | `position` | `top-right` | `top-left`, `top-right`, `bottom-left`, `bottom-right`, `center` |
 | `size` | `medium` | `small`, `medium`, `large` |
-| `duration_ms` | `15000` | 1000 to 120000 |
+| `duration_ms` | `15000` | 1000 to 600000 |
 | `interrupt` | `false` | Take remote focus so OK or Back dismisses the popup |
 | `profiles` | camera setting | SceneTV profile ids or names that may see the popup |
 | `pause_media` | camera setting | Override whether playing media is paused |
@@ -206,11 +206,14 @@ actions:
         - Living room
 ```
 
-The service raises an error when the camera id is unknown on the TV, popups are
-disabled on the TV, or the snapshot cannot be fetched. When the active SceneTV
-profile is not one of the camera's popup profiles, the TV drops the popup and
-the service returns quietly. Use `android_tv_bridge.dismiss_popup` to close it
-early.
+The TV answers after it has the first snapshot, so the service waits up to
+12 seconds by default (`timeout_ms` overrides it). It raises an error when the
+camera id is unknown or disabled on the TV, Home Assistant popups are turned off
+on the TV, SceneTV may not draw over other apps, or the snapshot cannot be
+fetched. When the active SceneTV profile is not one of the camera's popup
+profiles, the TV drops the popup and the service returns quietly. Triggering the
+same camera again while it is showing extends the popup instead of stacking a
+new one. Use `android_tv_bridge.dismiss_popup` to close it early.
 
 ## Development status
 

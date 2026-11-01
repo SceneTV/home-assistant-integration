@@ -454,7 +454,7 @@ show_camera:
       selector:
         number:
           min: 1000
-          max: 120000
+          max: 600000
           mode: box
     interrupt:
       description: Take remote focus so OK or Back dismisses the popup.

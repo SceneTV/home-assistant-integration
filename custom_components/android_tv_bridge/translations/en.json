@@ -101,7 +101,7 @@
         },
         "duration_ms": {
           "name": "Duration",
-          "description": "How long the popup stays visible, in milliseconds (1000 to 120000)."
+          "description": "How long the popup stays visible, in milliseconds (1000 to 600000)."
         },
         "interrupt": {
           "name": "Interrupt",
@@ -117,7 +117,7 @@
         },
         "timeout_ms": {
           "name": "Command timeout",
-          "description": "How long to wait for the launcher to answer, in milliseconds."
+          "description": "How long to wait for the launcher to answer, in milliseconds. Defaults to 12000 because the TV waits for the first snapshot."
         }
       }
     }
