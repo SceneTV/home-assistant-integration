@@ -286,7 +286,6 @@ actions:
       area_id: living_room
 ```
 
-<<<<<<< HEAD
 ## Device triggers
 
 Each SceneTV TV offers device triggers, so automations can be built from the
@@ -345,7 +344,7 @@ Notes:
   Assistant URL you enter.
 - Profiles are matched by name, so renaming a profile on the TV means updating
   the blueprint inputs.
-=======
+
 ## Troubleshooting
 
 - **Pairing was revoked or the launcher was reinstalled.** Home Assistant shows a "Re-authentication required" card for the TV. Open it, submit, and approve the new prompt on the TV. Entities and automations keep working with the new token.
@@ -355,7 +354,6 @@ Notes:
 - **Reporting a bug.** Download diagnostics from the device page (three-dot menu > Download diagnostics) and attach the file to an issue. The pairing token, host and network addresses are redacted.
 
 The **Idle**, **Last key** and **Selected item** entities are disabled by default because the launcher does not report them yet. You can enable them in the entity settings.
->>>>>>> origin/main
 
 ## Development
 
