@@ -10,7 +10,7 @@ import logging
 from typing import Any
 from uuid import uuid4
 
-from aiohttp import ClientWebSocketResponse
+from aiohttp import ClientError, ClientWebSocketResponse
 from aiohttp import WSMsgType
 
 from homeassistant.config_entries import ConfigEntry
@@ -325,6 +325,10 @@ class AndroidTVBridgeRuntime:
                         await self._handle_ws_payload(message.json())
                     elif message.type in (WSMsgType.CLOSED, WSMsgType.ERROR):
                         break
+                # The launcher closed the socket without raising: report it,
+                # otherwise entities stay "connected" while the loop sleeps.
+                self.connected = False
+                self._merge_state({"connection": False})
             except AndroidTVBridgeAuthError as err:
                 self.connected = False
                 self._merge_state({"connection": False})
@@ -446,7 +450,11 @@ class AndroidTVBridgeRuntime:
             self._pending.pop(command_id, None)
             raise HomeAssistantError("Launcher WebSocket is not ready")
 
-        await websocket.send_json(envelope)
+        try:
+            await websocket.send_json(envelope)
+        except (ConnectionError, RuntimeError, ClientError) as err:
+            self._pending.pop(command_id, None)
+            raise HomeAssistantError(f"Could not send command: {err}") from err
         try:
             result = await asyncio.wait_for(future, timeout=timeout)
         except TimeoutError as err:
