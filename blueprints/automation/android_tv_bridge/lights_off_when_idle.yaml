@@ -1,0 +1,78 @@
+blueprint:
+  name: SceneTV lights off when the TV is idle
+  description: >-
+    Turn lights off when nothing has played on a SceneTV TV for a while. Also
+    reacts to the TV's own "became idle" trigger once the launcher reports it.
+  domain: automation
+  source_url: https://github.com/SceneTV/home-assistant-integration/blob/main/blueprints/automation/android_tv_bridge/lights_off_when_idle.yaml
+  input:
+    tv:
+      name: TV
+      selector:
+        device:
+          integration: android_tv_bridge
+    playing_sensor:
+      name: TV "Playing" sensor
+      selector:
+        entity:
+          domain: binary_sensor
+          integration: android_tv_bridge
+    idle_minutes:
+      name: Minutes without playback
+      default: 20
+      selector:
+        number:
+          min: 1
+          max: 240
+          unit_of_measurement: min
+    lights:
+      name: Lights
+      selector:
+        entity:
+          domain: light
+          multiple: true
+    transition:
+      name: Transition
+      default: 5
+      selector:
+        number:
+          min: 0
+          max: 60
+          unit_of_measurement: s
+    only_after_sunset:
+      name: Only after sunset
+      default: true
+      selector:
+        boolean:
+
+mode: single
+max_exceeded: silent
+
+variables:
+  only_after_sunset: !input only_after_sunset
+  playing_sensor: !input playing_sensor
+
+triggers:
+  - trigger: state
+    entity_id: !input playing_sensor
+    to: "off"
+    for:
+      minutes: !input idle_minutes
+  - trigger: device
+    domain: android_tv_bridge
+    device_id: !input tv
+    type: became_idle
+
+conditions:
+  - condition: template
+    value_template: "{{ not is_state(playing_sensor, 'on') }}"
+  - condition: template
+    value_template: >-
+      {{ not only_after_sunset or is_state('sun.sun', 'below_horizon') }}
+
+actions:
+  - action: light.turn_off
+    target:
+      entity_id: !input lights
+    data:
+      transition: !input transition

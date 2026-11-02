@@ -1,0 +1,121 @@
+blueprint:
+  name: SceneTV doorbell popup
+  description: >-
+    Show a camera snapshot on a SceneTV TV when the doorbell rings or motion is
+    detected. The popup appears over any app. Optionally pause what is playing.
+  domain: automation
+  source_url: https://github.com/SceneTV/home-assistant-integration/blob/main/blueprints/automation/android_tv_bridge/doorbell_popup.yaml
+  input:
+    doorbell:
+      name: Doorbell or motion sensor
+      description: >-
+        A binary sensor (fires when it turns on) or an event entity (fires on
+        every event).
+      selector:
+        entity:
+          domain:
+            - binary_sensor
+            - event
+    camera:
+      name: Camera
+      selector:
+        entity:
+          domain: camera
+    tv:
+      name: TV
+      selector:
+        device:
+          integration: android_tv_bridge
+    ha_url:
+      name: Home Assistant URL the TV can reach
+      description: >-
+        For example http://192.168.1.10:8123. The TV loads the snapshot from
+        this address.
+      selector:
+        text:
+          type: url
+    title:
+      name: Popup title
+      default: Someone is at the door
+      selector:
+        text:
+    duration:
+      name: How long to show it
+      default: 20
+      selector:
+        number:
+          min: 5
+          max: 300
+          unit_of_measurement: s
+    position:
+      name: Popup position
+      default: center
+      selector:
+        select:
+          options:
+            - top-left
+            - top-right
+            - bottom-left
+            - bottom-right
+            - center
+    pause_media:
+      name: Pause what is playing
+      default: false
+      selector:
+        boolean:
+    cooldown:
+      name: Ignore repeat rings for
+      default: 30
+      selector:
+        number:
+          min: 0
+          max: 600
+          unit_of_measurement: s
+
+mode: single
+max_exceeded: silent
+
+variables:
+  camera: !input camera
+  ha_url: !input ha_url
+  pause_media: !input pause_media
+  duration: !input duration
+  cooldown: !input cooldown
+
+triggers:
+  - trigger: state
+    entity_id: !input doorbell
+    not_from:
+      - unavailable
+      - unknown
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ trigger.to_state.domain == 'event'
+         or trigger.to_state.state == 'on' }}
+  - condition: template
+    value_template: "{{ trigger.to_state.state not in ['unavailable', 'unknown'] }}"
+
+actions:
+  - if:
+      - condition: template
+        value_template: "{{ pause_media }}"
+    then:
+      - action: android_tv_bridge.media_command
+        target:
+          device_id: !input tv
+        data:
+          command: pause
+        continue_on_error: true
+  - action: android_tv_bridge.show_image
+    target:
+      device_id: !input tv
+    data:
+      title: !input title
+      position: !input position
+      duration_ms: "{{ (duration | int) * 1000 }}"
+      image_url: >-
+        {{ ha_url | trim('/') }}/api/camera_proxy/{{ camera }}?token={{ state_attr(camera, 'access_token') }}
+  - delay:
+      seconds: "{{ cooldown | int }}"

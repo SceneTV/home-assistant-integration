@@ -7,7 +7,7 @@ from typing import Any
 
 from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import UnitOfTime
+from homeassistant.const import EntityCategory, UnitOfTime
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -38,6 +38,8 @@ SENSORS: tuple[AndroidTVBridgeSensorDescription, ...] = (
         key="selected_item",
         translation_key="selected_item",
         value_key="selected_item",
+        # The launcher does not publish the focused tile yet.
+        entity_registry_enabled_default=False,
     ),
     AndroidTVBridgeSensorDescription(
         key="media_app",
@@ -80,11 +82,14 @@ SENSORS: tuple[AndroidTVBridgeSensorDescription, ...] = (
         key="last_key",
         translation_key="last_key",
         value_key="last_key",
+        # The launcher does not publish key presses into state yet.
+        entity_registry_enabled_default=False,
     ),
     AndroidTVBridgeSensorDescription(
         key="app_list_version",
         translation_key="app_list_version",
         value_key="app_list_version",
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
 )
 

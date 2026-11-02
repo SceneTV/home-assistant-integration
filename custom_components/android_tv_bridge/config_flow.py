@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 import logging
 from typing import Any
 
@@ -10,6 +11,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
 from homeassistant.core import callback
+from homeassistant.data_entry_flow import AbortFlow
 from homeassistant.helpers import instance_id, selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
@@ -90,6 +92,7 @@ class AndroidTVBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._metadata: dict[str, Any] = {}
         self._discovery_properties: dict[str, Any] = {}
         self._pairing_request_id: str | None = None
+        self._reauth_entry: config_entries.ConfigEntry | None = None
 
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
@@ -192,6 +195,14 @@ class AndroidTVBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             api_version=self._api_version,
         )
         self._metadata = await client.async_get_metadata()
+        if self._reauth_entry is not None:
+            # Never hand a token for this entry to a different launcher that
+            # took over the stored address.
+            found = _stable_unique_id(self._metadata)
+            expected = self._reauth_entry.unique_id
+            if expected and found and found != expected:
+                raise AbortFlow("wrong_device")
+            return
         unique_id = _stable_unique_id(self._metadata, self._discovery_properties)
         if unique_id:
             await self.async_set_unique_id(unique_id)
@@ -237,6 +248,12 @@ class AndroidTVBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
 
     async def _async_create_entry(self, token: str) -> config_entries.ConfigFlowResult:
         assert self._host is not None
+        if self._reauth_entry is not None:
+            return self.async_update_reload_and_abort(
+                self._reauth_entry,
+                data={**self._reauth_entry.data, CONF_TOKEN: token},
+                reason="reauth_successful",
+            )
         data = {
             CONF_HOST: self._host,
             CONF_PORT: self._port,
@@ -245,6 +262,85 @@ class AndroidTVBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             CONF_API_VERSION: self._api_version,
         }
         return self.async_create_entry(title=self._name, data=data)
+
+    async def async_step_reauth(
+        self, entry_data: Mapping[str, Any]
+    ) -> config_entries.ConfigFlowResult:
+        """Start reauthentication after the launcher rejected the stored token."""
+        self._reauth_entry = self.hass.config_entries.async_get_entry(
+            self.context["entry_id"]
+        )
+        self._host = entry_data[CONF_HOST]
+        self._port = entry_data[CONF_PORT]
+        self._name = entry_data.get(CONF_NAME) or self._name
+        self._api_version = entry_data.get(CONF_API_VERSION, DEFAULT_API_VERSION)
+        return await self.async_step_reauth_confirm()
+
+    async def async_step_reauth_confirm(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Ask the user to approve a new pairing prompt on the TV."""
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            try:
+                await self._async_fetch_metadata()
+                return await self._async_start_pairing()
+            except AndroidTVBridgeError:
+                _LOGGER.exception("Could not start re-pairing")
+                errors["base"] = "cannot_connect"
+
+        return self.async_show_form(
+            step_id="reauth_confirm",
+            description_placeholders={"name": self._name},
+            errors=errors,
+        )
+
+    async def async_step_reconfigure(
+        self, user_input: dict[str, Any] | None = None
+    ) -> config_entries.ConfigFlowResult:
+        """Change the host or port of an existing launcher."""
+        entry = self.hass.config_entries.async_get_entry(self.context["entry_id"])
+        assert entry is not None
+        errors: dict[str, str] = {}
+        if user_input is not None:
+            client = AndroidTVBridgeClient(
+                async_get_clientsession(self.hass),
+                user_input[CONF_HOST],
+                user_input[CONF_PORT],
+                api_version=entry.data.get(CONF_API_VERSION, DEFAULT_API_VERSION),
+            )
+            try:
+                metadata = await client.async_get_metadata()
+            except AndroidTVBridgeError:
+                errors["base"] = "cannot_connect"
+            else:
+                unique_id = _stable_unique_id(metadata)
+                if entry.unique_id and unique_id and unique_id != entry.unique_id:
+                    return self.async_abort(reason="wrong_device")
+                return self.async_update_reload_and_abort(
+                    entry,
+                    data={
+                        **entry.data,
+                        CONF_HOST: user_input[CONF_HOST],
+                        CONF_PORT: user_input[CONF_PORT],
+                    },
+                    reason="reconfigure_successful",
+                )
+
+        return self.async_show_form(
+            step_id="reconfigure",
+            data_schema=vol.Schema(
+                {
+                    vol.Required(
+                        CONF_HOST, default=entry.data.get(CONF_HOST, "")
+                    ): str,
+                    vol.Required(
+                        CONF_PORT, default=entry.data.get(CONF_PORT, DEFAULT_PORT)
+                    ): int,
+                }
+            ),
+            errors=errors,
+        )
 
     @staticmethod
     @callback

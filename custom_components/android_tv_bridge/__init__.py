@@ -11,6 +11,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 
 from .client import AndroidTVBridgeAuthError, AndroidTVBridgeError
 from .const import DOMAIN, PLATFORMS
+from .issues import async_clear_issues
 from .runtime import AndroidTVBridgeRuntime
 from .services import async_register_services, async_unregister_services
 
@@ -61,6 +62,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
         if runtime is not None:
             await runtime.async_stop()
+        async_clear_issues(hass, entry)
         if not hass.data[DOMAIN]:
             async_unregister_services(hass)
     return unload_ok
