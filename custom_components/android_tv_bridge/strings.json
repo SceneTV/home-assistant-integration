@@ -18,6 +18,18 @@
         "title": "Approve pairing",
         "description": "Approve the pairing prompt on the TV, then submit this form.",
         "data": {}
+      },
+      "reauth_confirm": {
+        "title": "Pair {name} again",
+        "description": "{name} rejected the stored pairing token, usually because the Home Assistant pairing was revoked on the TV or the launcher was reinstalled. Submit to show a new pairing prompt on the TV."
+      },
+      "reconfigure": {
+        "title": "Change launcher address",
+        "description": "Update the address if the TV got a new IP address.",
+        "data": {
+          "host": "Host",
+          "port": "Port"
+        }
       }
     },
     "error": {
@@ -29,7 +41,20 @@
       "cannot_connect": "Could not connect to the launcher.",
       "pairing_rejected": "Pairing was rejected on the TV.",
       "pairing_expired": "The pairing request expired.",
-      "pairing_revoked": "Pairing was revoked."
+      "pairing_revoked": "Pairing was revoked.",
+      "reauth_successful": "Pairing renewed. The integration has reloaded.",
+      "reconfigure_successful": "Address updated. The integration has reloaded.",
+      "wrong_device": "That address belongs to a different SceneTV launcher."
+    }
+  },
+  "issues": {
+    "accessibility_disabled": {
+      "title": "SceneTV accessibility service is off on {name}",
+      "description": "Key events, the Home button, in-app profile linking and media controls need the SceneTV accessibility service. On the TV, open Settings > Accessibility (on some TVs Device Preferences > Accessibility), select SceneTV and turn it on. This issue clears itself once the TV reports the service as enabled."
+    },
+    "overlay_permission_missing": {
+      "title": "SceneTV cannot draw over other apps on {name}",
+      "description": "Popup notifications and camera popups only appear over other apps when SceneTV has the \"Display over other apps\" permission. On the TV, open Settings > Apps > Special app access > Display over other apps and allow SceneTV. This issue clears itself once the TV reports the permission."
     }
   },
   "entity": {
@@ -52,7 +77,9 @@
       "playing": { "name": "Playing" },
       "launcher_visible": { "name": "Launcher visible" },
       "idle": { "name": "Idle" },
-      "accessibility": { "name": "Accessibility" }
+      "accessibility": { "name": "Accessibility" },
+      "overlay_permission": { "name": "Overlay permission" },
+      "popups_enabled": { "name": "Home Assistant popups" }
     },
     "button": {
       "refresh": { "name": "Refresh apps" },

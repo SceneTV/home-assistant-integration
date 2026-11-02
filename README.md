@@ -286,6 +286,16 @@ actions:
       area_id: living_room
 ```
 
+## Troubleshooting
+
+- **Pairing was revoked or the launcher was reinstalled.** Home Assistant shows a "Re-authentication required" card for the TV. Open it, submit, and approve the new prompt on the TV. Entities and automations keep working with the new token.
+- **The TV got a new IP address.** Open the integration's menu and choose **Reconfigure** to change the host or port. Discovery also updates the address automatically when it sees the TV again.
+- **Repairs.** Settings > System > Repairs lists a SceneTV issue when the accessibility service is off or the "Display over other apps" permission is missing on the TV. Each issue says how to fix it on the TV and clears itself once the TV reports the change.
+- **Entities are unavailable.** Entities go unavailable while the launcher's live connection is down, because commands cannot reach the TV. The **Connection** diagnostic sensor stays available and shows when the link comes back.
+- **Reporting a bug.** Download diagnostics from the device page (three-dot menu > Download diagnostics) and attach the file to an issue. The pairing token, host and network addresses are redacted.
+
+The **Idle**, **Last key** and **Selected item** entities are disabled by default because the launcher does not report them yet. You can enable them in the entity settings.
+
 ## Development
 
 Tests use `pytest-homeassistant-custom-component`:
@@ -298,3 +308,7 @@ pytest
 ## Development status
 
 The Android launcher API is still being implemented. Endpoint paths and payload shapes are isolated in `custom_components/android_tv_bridge/client.py` and `runtime.py` so the integration can track the launcher protocol as it stabilizes.
+
+## License
+
+Apache License 2.0. See [LICENSE](LICENSE).
