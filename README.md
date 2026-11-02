@@ -133,6 +133,42 @@ data:
   launch_mode: play_then_exit
 ```
 
+## Action tiles
+
+Action tiles are home screen tiles that run a Home Assistant script or scene.
+The TV never stores a Home Assistant token.
+
+1. In **Settings > Devices & services > SceneTV > Configure**, pick the scripts
+   and scenes this TV may run ("Actions the TV can run").
+2. On the TV's `/configure` page choose **Layout > Add > Home Assistant action**
+   and pick one from the list, or create the tile from Home Assistant:
+
+```yaml
+service: android_tv_bridge.create_action_tile
+target:
+  device_id: your_home_assistant_device_id
+data:
+  action: script.movie_mode
+  subtitle: Dims the lights
+```
+
+Pressing the tile runs the script or scene (only if it is still exposed) and
+the tile shows "Done" or the error. Every press also fires
+`android_tv_bridge.action_tile_pressed` with `action_id`, `source`,
+`source_id`, `tile_title`, `profile_id` and `profile_name`, so you can use a
+custom `action_id` (for example `movie_mode`) and handle it in an automation:
+
+```yaml
+trigger:
+  - platform: event
+    event_type: android_tv_bridge.action_tile_pressed
+    event_data:
+      action_id: movie_mode
+```
+
+Popup buttons (`popup_action`) with an exposed script or scene as their
+`action_id` run it the same way.
+
 ## Popup notifications
 
 SceneTV exposes popup notifications as Home Assistant services and as a notify

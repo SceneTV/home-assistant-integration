@@ -44,7 +44,7 @@ async def test_reload_does_not_stack_update_listeners(hass: HomeAssistant) -> No
         for _ in range(2):
             assert await hass.config_entries.async_reload(entry.entry_id)
             assert entry.state is ConfigEntryState.LOADED
-        assert len(entry.update_listeners) == 0
+        assert len(entry.update_listeners) == 1
         assert await hass.config_entries.async_unload(entry.entry_id)
     assert entry.entry_id not in hass.data.get(DOMAIN, {})
 
