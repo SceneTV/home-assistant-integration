@@ -16,7 +16,7 @@ from aiohttp import WSMsgType
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
 from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
 from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
@@ -40,6 +40,7 @@ from .const import (
     EVENT_GENERIC,
     EVENT_MAP,
 )
+from .issues import async_update_issues
 from .media_contract import (
     BRIDGE_MEDIA_COMMAND,
     BRIDGE_VOLUME_COMMAND,
@@ -173,6 +174,7 @@ class AndroidTVBridgeRuntime:
         self.coordinator = DataUpdateCoordinator(
             hass,
             _LOGGER,
+            config_entry=entry,
             name=DOMAIN,
             update_method=self._async_update_data,
             update_interval=_UPDATE_INTERVAL,
@@ -264,7 +266,7 @@ class AndroidTVBridgeRuntime:
         try:
             state = await self.client.async_get_state()
         except AndroidTVBridgeAuthError as err:
-            raise UpdateFailed(str(err)) from err
+            raise ConfigEntryAuthFailed(str(err)) from err
         except AndroidTVBridgeError as err:
             if self.coordinator.data is not None:
                 _LOGGER.debug("State refresh failed; keeping WebSocket state: %s", err)
@@ -273,11 +275,13 @@ class AndroidTVBridgeRuntime:
                     "connection": self.connected,
                 }
             raise UpdateFailed(str(err)) from err
-        return {
+        data = {
             **(self.coordinator.data or {}),
             **_clean_state(state),
             "connection": self.connected,
         }
+        async_update_issues(self.hass, self.entry, self.device_name, data)
+        return data
 
     async def _async_listen(
         self,
@@ -304,9 +308,14 @@ class AndroidTVBridgeRuntime:
             except AndroidTVBridgeAuthError as err:
                 self.connected = False
                 self._merge_state({"connection": False})
-                _LOGGER.exception("Launcher rejected the stored pairing token")
                 if first_connection is not None and not first_connection.done():
                     first_connection.set_exception(err)
+                    return
+                _LOGGER.warning(
+                    "%s rejected the stored pairing token; starting re-pairing",
+                    self.device_name,
+                )
+                self.entry.async_start_reauth(self.hass)
                 return
             except (AndroidTVBridgeConnectionError, ValueError) as err:
                 self.connected = False
@@ -350,7 +359,9 @@ class AndroidTVBridgeRuntime:
 
     def _merge_state(self, update: Mapping[str, Any]) -> None:
         current = self.coordinator.data or {}
-        self.coordinator.async_set_updated_data({**current, **dict(update)})
+        merged = {**current, **dict(update)}
+        self.coordinator.async_set_updated_data(merged)
+        async_update_issues(self.hass, self.entry, self.device_name, merged)
 
     def _fire_event(self, event_type: str, payload: dict[str, Any]) -> None:
         if not event_type:
