@@ -286,5 +286,28 @@
         }
       }
     }
+  },
+  "device_automation": {
+    "trigger_type": {
+      "app_opened": "{entity_name} opened an app",
+      "playback_started": "{entity_name} started playing",
+      "playback_paused": "{entity_name} paused playback",
+      "playback_stopped": "{entity_name} stopped playback",
+      "profile_changed": "{entity_name} switched profile",
+      "popup_shown": "{entity_name} showed a popup",
+      "popup_dismissed": "{entity_name} dismissed a popup",
+      "popup_action": "A popup button was pressed on {entity_name}",
+      "tile_pressed": "An action tile was pressed on {entity_name}",
+      "web_action": "A web card or popup sent an action on {entity_name}",
+      "queue_item_started": "{entity_name} started the next queue item",
+      "queue_finished": "{entity_name} finished its play queue",
+      "became_idle": "{entity_name} became idle",
+      "became_active": "{entity_name} became active"
+    },
+    "extra_fields": {
+      "package": "App package (optional)",
+      "profile": "Profile name or id (optional)",
+      "action_id": "Action id (optional)"
+    }
   }
 }

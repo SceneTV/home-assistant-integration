@@ -1,0 +1,192 @@
+blueprint:
+  name: SceneTV bedtime lock
+  description: >-
+    At bedtime, warn on the TV, then stop playback and go back to the home
+    screen. Until the morning, any app opened while the kids profile is active
+    is closed again with a reminder. SceneTV profiles do not restrict apps on
+    their own yet, so this is a soft lock: switching to another profile on the
+    TV gets around it.
+  domain: automation
+  source_url: https://github.com/SceneTV/home-assistant-integration/blob/main/blueprints/automation/android_tv_bridge/bedtime_lock.yaml
+  input:
+    tv:
+      name: TV
+      selector:
+        device:
+          integration: android_tv_bridge
+    profile_select:
+      name: TV profile selector
+      description: The TV's "Active profile" entity.
+      selector:
+        entity:
+          domain: select
+          integration: android_tv_bridge
+    home_button:
+      name: TV home button
+      description: The TV's "Home" button entity.
+      selector:
+        entity:
+          domain: button
+          integration: android_tv_bridge
+    kids_profile:
+      name: Kids profile
+      description: Profile name exactly as it appears on the TV.
+      selector:
+        text:
+    switch_to_kids:
+      name: Switch to the kids profile at bedtime
+      description: Useful when the kids are not always on their own profile.
+      default: false
+      selector:
+        boolean:
+    bedtime:
+      name: Bedtime
+      default: "20:00:00"
+      selector:
+        time:
+    wake_time:
+      name: Lock ends at
+      default: "07:00:00"
+      selector:
+        time:
+    warning_minutes:
+      name: Warn this many minutes before
+      description: 0 for no warning.
+      default: 5
+      selector:
+        number:
+          min: 0
+          max: 30
+          unit_of_measurement: min
+    message:
+      name: Reminder text
+      default: It's bedtime. The TV is done for tonight.
+      selector:
+        text:
+    allowed_apps:
+      name: Apps allowed after bedtime (optional)
+      description: App package names that are not closed, such as a music app.
+      default: []
+      selector:
+        text:
+          multiple: true
+
+mode: queued
+max: 10
+
+# Template triggers are evaluated with trigger_variables only, not variables.
+trigger_variables:
+  warning_minutes: !input warning_minutes
+  bedtime: !input bedtime
+
+variables:
+  profile_select: !input profile_select
+  kids_profile: !input kids_profile
+  switch_to_kids: !input switch_to_kids
+  warning_minutes: !input warning_minutes
+  allowed_apps: !input allowed_apps
+  message: !input message
+  bedtime: !input bedtime
+  launcher_package: dev.scenetv.launcher
+
+triggers:
+  - trigger: template
+    value_template: >-
+      {% set bed = today_at(bedtime) %}
+      {{ warning_minutes | int > 0
+         and now() >= bed - timedelta(minutes=warning_minutes | int)
+         and now() < bed }}
+    id: warning
+  - trigger: time
+    at: !input bedtime
+    id: bedtime
+  - trigger: device
+    domain: android_tv_bridge
+    device_id: !input tv
+    type: app_opened
+    id: app_opened
+
+conditions:
+  - condition: or
+    conditions:
+      - condition: trigger
+        id: warning
+      - condition: trigger
+        id: bedtime
+      - condition: and
+        conditions:
+          - condition: trigger
+            id: app_opened
+          - condition: time
+            after: !input bedtime
+            before: !input wake_time
+          - condition: template
+            value_template: "{{ is_state(profile_select, kids_profile) }}"
+          - condition: template
+            value_template: >-
+              {% set pkg = (trigger.event.data.foreground or {}).package %}
+              {{ pkg and not pkg.startswith(launcher_package) and pkg not in allowed_apps }}
+
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: warning
+        sequence:
+          - action: android_tv_bridge.show_popup
+            target:
+              device_id: !input tv
+            data:
+              title: Bedtime soon
+              text: "The TV turns off for the night in {{ warning_minutes | int }} minutes."
+              position: top-right
+              duration_ms: 15000
+      - conditions:
+          - condition: trigger
+            id: bedtime
+        sequence:
+          - if:
+              - condition: template
+                value_template: "{{ switch_to_kids }}"
+            then:
+              - action: select.select_option
+                target:
+                  entity_id: "{{ profile_select }}"
+                data:
+                  option: "{{ kids_profile }}"
+                continue_on_error: true
+          - condition: template
+            value_template: "{{ is_state(profile_select, kids_profile) }}"
+          - action: android_tv_bridge.media_command
+            target:
+              device_id: !input tv
+            data:
+              command: stop
+            continue_on_error: true
+          - action: button.press
+            target:
+              entity_id: !input home_button
+          - action: android_tv_bridge.show_popup
+            target:
+              device_id: !input tv
+            data:
+              title: Bedtime
+              text: "{{ message }}"
+              position: center
+              font_size: large
+              duration_ms: 15000
+      - conditions:
+          - condition: trigger
+            id: app_opened
+        sequence:
+          - action: button.press
+            target:
+              entity_id: !input home_button
+          - action: android_tv_bridge.show_popup
+            target:
+              device_id: !input tv
+            data:
+              title: Bedtime
+              text: "{{ message }}"
+              position: center
+              duration_ms: 10000
