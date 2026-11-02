@@ -18,6 +18,18 @@
         "title": "Approve pairing",
         "description": "Approve the pairing prompt on the TV, then submit this form.",
         "data": {}
+      },
+      "reauth_confirm": {
+        "title": "Pair {name} again",
+        "description": "{name} rejected the stored pairing token, usually because the Home Assistant pairing was revoked on the TV or the launcher was reinstalled. Submit to show a new pairing prompt on the TV."
+      },
+      "reconfigure": {
+        "title": "Change launcher address",
+        "description": "Update the address if the TV got a new IP address.",
+        "data": {
+          "host": "Host",
+          "port": "Port"
+        }
       }
     },
     "error": {
@@ -29,7 +41,34 @@
       "cannot_connect": "Could not connect to the launcher.",
       "pairing_rejected": "Pairing was rejected on the TV.",
       "pairing_expired": "The pairing request expired.",
-      "pairing_revoked": "Pairing was revoked."
+      "pairing_revoked": "Pairing was revoked.",
+      "reauth_successful": "Pairing renewed. The integration has reloaded.",
+      "reconfigure_successful": "Address updated. The integration has reloaded.",
+      "wrong_device": "That address belongs to a different SceneTV launcher."
+    }
+  },
+  "issues": {
+    "accessibility_disabled": {
+      "title": "SceneTV accessibility service is off on {name}",
+      "description": "Key events, the Home button, in-app profile linking and media controls need the SceneTV accessibility service. On the TV, open Settings > Accessibility (on some TVs Device Preferences > Accessibility), select SceneTV and turn it on. This issue clears itself once the TV reports the service as enabled."
+    },
+    "overlay_permission_missing": {
+      "title": "SceneTV cannot draw over other apps on {name}",
+      "description": "Popup notifications and camera popups only appear over other apps when SceneTV has the \"Display over other apps\" permission. On the TV, open Settings > Apps > Special app access > Display over other apps and allow SceneTV. This issue clears itself once the TV reports the permission."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "SceneTV options",
+        "description": "Pick the scripts and scenes this TV may run. They appear in the TV's /configure page when you add a Home Assistant action tile, and pressing a tile runs them. Every press also fires android_tv_bridge.action_tile_pressed for your own automations.",
+        "data": {
+          "exposed_actions": "Actions the TV can run"
+        },
+        "data_description": {
+          "exposed_actions": "Only these scripts and scenes can be run from the TV. Removing one stops its tiles from running it."
+        }
+      }
     }
   },
   "entity": {
@@ -52,7 +91,9 @@
       "playing": { "name": "Playing" },
       "launcher_visible": { "name": "Launcher visible" },
       "idle": { "name": "Idle" },
-      "accessibility": { "name": "Accessibility" }
+      "accessibility": { "name": "Accessibility" },
+      "overlay_permission": { "name": "Overlay permission" },
+      "popups_enabled": { "name": "Home Assistant popups" }
     },
     "button": {
       "refresh": { "name": "Refresh apps" },
@@ -71,6 +112,40 @@
     }
   },
   "services": {
+    "create_action_tile": {
+      "name": "Create action tile",
+      "description": "Add a Home Assistant action tile to the active SceneTV profile. Pressing it runs the script or scene if it is exposed in the integration options, and always fires android_tv_bridge.action_tile_pressed.",
+      "fields": {
+        "entry_id": {
+          "name": "Config entry ID",
+          "description": "SceneTV config entry to target. Optional when you pick a target or only one launcher is configured."
+        },
+        "action": {
+          "name": "Action",
+          "description": "Script or scene the tile runs. Expose it in the integration options too, or the press only fires the event."
+        },
+        "action_id": {
+          "name": "Action ID",
+          "description": "Custom action id for your own automations, used when no script or scene is picked. Letters, digits, and _ . : - (up to 64)."
+        },
+        "title": {
+          "name": "Title",
+          "description": "Tile title. Defaults to the script or scene name."
+        },
+        "subtitle": {
+          "name": "Subtitle",
+          "description": "Optional second line on the tile."
+        },
+        "image_url": {
+          "name": "Image URL",
+          "description": "Optional image shown on the tile instead of the default icon."
+        },
+        "timeout_ms": {
+          "name": "Timeout",
+          "description": "How long to wait for the launcher, in milliseconds."
+        }
+      }
+    },
     "show_web_popup": {
       "name": "Show web popup",
       "description": "Show an HTML or URL popup on SceneTV. It appears only while the SceneTV launcher is in the foreground. Provide exactly one of html or url.",
@@ -258,6 +333,29 @@
           "description": "How long to wait for the launcher to answer, in milliseconds."
         }
       }
+    }
+  },
+  "device_automation": {
+    "trigger_type": {
+      "app_opened": "{entity_name} opened an app",
+      "playback_started": "{entity_name} started playing",
+      "playback_paused": "{entity_name} paused playback",
+      "playback_stopped": "{entity_name} stopped playback",
+      "profile_changed": "{entity_name} switched profile",
+      "popup_shown": "{entity_name} showed a popup",
+      "popup_dismissed": "{entity_name} dismissed a popup",
+      "popup_action": "A popup button was pressed on {entity_name}",
+      "tile_pressed": "An action tile was pressed on {entity_name}",
+      "web_action": "A web card or popup sent an action on {entity_name}",
+      "queue_item_started": "{entity_name} started the next queue item",
+      "queue_finished": "{entity_name} finished its play queue",
+      "became_idle": "{entity_name} became idle",
+      "became_active": "{entity_name} became active"
+    },
+    "extra_fields": {
+      "package": "App package (optional)",
+      "profile": "Profile name or id (optional)",
+      "action_id": "Action id (optional)"
     }
   }
 }

@@ -154,6 +154,44 @@ create_deep_link_shortcut:
           max: 60000
           mode: box
 
+create_action_tile:
+  target:
+    entity:
+      integration: android_tv_bridge
+  fields:
+    entry_id:
+      selector:
+        text:
+    action:
+      example: script.movie_mode
+      selector:
+        entity:
+          domain:
+            - script
+            - scene
+    action_id:
+      example: movie_mode
+      selector:
+        text:
+    title:
+      example: Movie mode
+      selector:
+        text:
+    subtitle:
+      example: Dims the lights
+      selector:
+        text:
+    image_url:
+      selector:
+        text:
+          type: url
+    timeout_ms:
+      selector:
+        number:
+          min: 1000
+          max: 60000
+          mode: box
+
 send_key:
   name: Send key
   description: Send a supported remote-control key event to SceneTV.

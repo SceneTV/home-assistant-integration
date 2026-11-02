@@ -29,7 +29,7 @@ from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers import entity_registry as er
 from homeassistant.helpers.service import async_extract_referenced_entity_ids
 
-from .const import DOMAIN
+from .const import DOMAIN, EXPOSED_ACTION_DOMAINS
 from .media_contract import (
     BRIDGE_MEDIA_COMMAND,
     MEDIA_CONTROL_COMMANDS,
@@ -52,6 +52,7 @@ TARGET_KEYS = (
 WEB_DIMENSION_MIN_DP = 120
 WEB_DIMENSION_MAX_DP = 2000
 QUEUE_POSITIONS = ("end", "next")
+ACTION_ID_PATTERN = r"^[A-Za-z0-9_.:-]{1,64}$"
 QUEUE_ITEM_FIELDS = ("uri", "package", "title", "subtitle", "image_url")
 
 POPUP_POSITIONS = (
@@ -101,6 +102,7 @@ SERVICE_LAUNCH_ACTIVITY = "launch_activity"
 SERVICE_LAUNCH_INTENT = "launch_intent"
 SERVICE_OPEN_URI = "open_uri"
 SERVICE_CREATE_DEEP_LINK_SHORTCUT = "create_deep_link_shortcut"
+SERVICE_CREATE_ACTION_TILE = "create_action_tile"
 SERVICE_SEND_KEY = "send_key"
 SERVICE_MEDIA_COMMAND = "media_command"
 SERVICE_SHOW_POPUP = "show_popup"
@@ -301,6 +303,19 @@ SERVICE_SCHEMAS = {
             vol.Schema({vol.Required("uri"): object}, extra=vol.ALLOW_EXTRA),
         ),
     ),
+    SERVICE_CREATE_ACTION_TILE: vol.All(
+        _schema(
+            {
+                vol.Optional("action"): cv.entity_domain(list(EXPOSED_ACTION_DOMAINS)),
+                vol.Optional("action_id"): vol.All(cv.string, vol.Match(ACTION_ID_PATTERN)),
+                vol.Optional("title"): cv.string,
+                vol.Optional("subtitle"): cv.string,
+                vol.Optional("image_url"): cv.string,
+                vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int,
+            }
+        ),
+        cv.has_at_least_one_key("action", "action_id"),
+    ),
     SERVICE_SEND_KEY: _schema(
         {
             vol.Required("key"): _key_event,
@@ -426,6 +441,10 @@ COMMAND_BUILDERS: dict[str, Callable[[ServiceCall], tuple[str, dict[str, Any]]]]
         "create_deep_link_shortcut",
         _deep_link_shortcut_payload(call),
     ),
+    SERVICE_CREATE_ACTION_TILE: lambda call: (
+        "create_deep_link_shortcut",
+        _action_tile_payload(call),
+    ),
     SERVICE_SEND_KEY: lambda call: ("send_key", {"key": call.data["key"]}),
     SERVICE_MEDIA_COMMAND: lambda call: (
         BRIDGE_MEDIA_COMMAND,
@@ -499,6 +518,36 @@ def _deep_link_shortcut_payload(call: ServiceCall) -> dict[str, Any]:
         if field in call.data:
             payload[field] = call.data[field]
     return payload
+
+
+def _action_tile_payload(call: ServiceCall) -> dict[str, Any]:
+    """Build a create_deep_link_shortcut payload for a Home Assistant action tile.
+
+    ``action`` (a script or scene) wins over a free-form ``action_id``. The tile
+    only runs the entity if it is also exposed in the integration options;
+    otherwise a press just fires ``android_tv_bridge.action_tile_pressed``.
+    """
+    action_id: str = call.data.get("action") or call.data["action_id"]
+    title = call.data.get("title") or _action_display_name(call, action_id)
+    payload: dict[str, Any] = {
+        "title": title,
+        "launch_mode": "ha_action",
+        "action_id": action_id,
+    }
+    if "subtitle" in call.data:
+        payload["subtitle"] = call.data["subtitle"]
+    if "image_url" in call.data:
+        payload["image_url"] = call.data["image_url"]
+    return payload
+
+
+def _action_display_name(call: ServiceCall, action_id: str) -> str:
+    hass = getattr(call, "hass", None)
+    state = hass.states.get(action_id) if hass is not None else None
+    if state is not None and state.name:
+        return state.name
+    object_id = action_id.split(".", 1)[-1]
+    return object_id.replace("_", " ").strip().capitalize() or action_id
 
 
 def _popup_payload(call: ServiceCall) -> dict[str, Any]:
