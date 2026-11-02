@@ -39,12 +39,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         hass.data[DOMAIN].pop(entry.entry_id, None)
         await runtime.async_stop()
         raise
-    # No update listener: the config and reconfigure flows reload the entry
-    # themselves, and the options flow has no options. A listener that called
-    # async_unload_entry/async_setup_entry directly would also stack up one
-    # extra listener per reload, because unload callbacks only run when the
-    # config entries machinery unloads the entry.
+    # Options (exposed scripts/scenes) only need a fresh catalog on the launcher,
+    # not a reload. Registered with async_on_unload so reloads never stack it.
+    entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     return True
+
+
+async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Push the updated action catalog to the launcher."""
+    runtime = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+    if runtime is not None:
+        await runtime.async_push_action_catalog()
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import patch
 
 from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant, ServiceCall
@@ -295,3 +296,36 @@ async def test_create_action_tile_service(hass: HomeAssistant) -> None:
             None,
         ),
     ]
+
+
+async def test_options_change_pushes_catalog_without_reload(hass: HomeAssistant) -> None:
+    entry = _entry(hass, [])
+    hass.states.async_set("scene.night", "scening", {"friendly_name": "Night"})
+    sent: list[tuple[str, dict[str, Any]]] = []
+
+    async def fake_start(self: AndroidTVBridgeRuntime) -> None:
+        self.metadata = {"device_id": LAUNCHER_ID, "display_name": "TV"}
+        self.connected = True
+
+    async def fake_send(self: AndroidTVBridgeRuntime, command_type: str, payload: Any = None, **_: Any):
+        sent.append((command_type, dict(payload or {})))
+        return {"status": "completed"}
+
+    with (
+        patch.object(AndroidTVBridgeRuntime, "async_start", fake_start),
+        patch.object(AndroidTVBridgeRuntime, "async_send_command", fake_send),
+    ):
+        assert await hass.config_entries.async_setup(entry.entry_id)
+        runtime = hass.data[DOMAIN][entry.entry_id]
+        hass.config_entries.async_update_entry(
+            entry, options={CONF_EXPOSED_ACTIONS: ["scene.night"]}
+        )
+        await hass.async_block_till_done()
+        assert hass.data[DOMAIN][entry.entry_id] is runtime
+        assert sent == [
+            (
+                "set_ha_actions",
+                {"actions": [{"id": "scene.night", "name": "Night", "domain": "scene"}]},
+            )
+        ]
+        assert await hass.config_entries.async_unload(entry.entry_id)
