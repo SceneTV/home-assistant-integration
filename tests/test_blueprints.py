@@ -59,13 +59,22 @@ INPUTS: dict[str, dict[str, Any]] = {
 }
 
 
+@pytest.fixture
+def expected_lingering_timers() -> bool:
+    """Template triggers (bedtime lock) keep a time listener alive."""
+    return True
+
+
 def test_every_blueprint_has_test_inputs() -> None:
     assert {p.name for p in BLUEPRINT_DIR.glob("*.yaml")} == set(INPUTS)
 
 
 @pytest.mark.parametrize("filename", sorted(INPUTS))
 async def test_blueprint_builds_valid_automation(
-    hass: HomeAssistant, filename: str, request: pytest.FixtureRequest
+    hass: HomeAssistant,
+    filename: str,
+    request: pytest.FixtureRequest,
+    caplog: pytest.LogCaptureFixture,
 ) -> None:
     target = Path(hass.config.path("blueprints", "automation", DOMAIN))
     target.mkdir(parents=True, exist_ok=True)
@@ -101,6 +110,9 @@ async def test_blueprint_builds_valid_automation(
         },
     )
     await hass.async_block_till_done()
+
+    # Triggers that fail to initialise only log a warning; the entity stays on.
+    assert "Error initializing" not in caplog.text
 
     state = hass.states.get("automation.under_test")
     assert state is not None, "automation was not created"

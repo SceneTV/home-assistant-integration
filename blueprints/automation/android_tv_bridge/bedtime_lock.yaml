@@ -74,6 +74,11 @@ blueprint:
 mode: queued
 max: 10
 
+# Template triggers are evaluated with trigger_variables only, not variables.
+trigger_variables:
+  warning_minutes: !input warning_minutes
+  bedtime: !input bedtime
+
 variables:
   profile_select: !input profile_select
   kids_profile: !input kids_profile
