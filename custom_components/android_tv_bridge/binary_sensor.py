@@ -49,7 +49,8 @@ BINARY_SENSORS: tuple[AndroidTVBridgeBinarySensorDescription, ...] = (
         key="idle",
         translation_key="idle",
         value_key="idle",
-        # The launcher does not compute idle yet and always reports false.
+        # Launchers before the activity-tracking release always report false;
+        # newer ones compute idle (see capabilities.activity), so opt in.
         entity_registry_enabled_default=False,
     ),
     AndroidTVBridgeBinarySensorDescription(

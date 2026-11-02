@@ -192,6 +192,21 @@ async def test_reauth_cannot_connect_shows_error(
     assert entry.data[CONF_TOKEN] == "old-token"
 
 
+async def test_reauth_aborts_when_address_is_another_launcher(
+    hass: HomeAssistant, client, mock_setup_entry
+) -> None:
+    entry = MockConfigEntry(domain=DOMAIN, unique_id="launcher-1", data=ENTRY_DATA)
+    entry.add_to_hass(hass)
+    client.async_get_metadata.return_value = {"device_id": "launcher-2"}
+
+    result = await _start_reauth(hass, entry)
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["type"] is FlowResultType.ABORT
+    assert result["reason"] == "wrong_device"
+    assert entry.data[CONF_TOKEN] == "old-token"
+    client.async_request_pairing.assert_not_called()
+
+
 async def _start_reconfigure(hass: HomeAssistant, entry: MockConfigEntry):
     return await hass.config_entries.flow.async_init(
         DOMAIN,

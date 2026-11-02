@@ -11,6 +11,7 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
 from homeassistant.core import callback
+from homeassistant.data_entry_flow import AbortFlow
 from homeassistant.helpers import instance_id
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
@@ -193,6 +194,12 @@ class AndroidTVBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
         self._metadata = await client.async_get_metadata()
         if self._reauth_entry is not None:
+            # Never hand a token for this entry to a different launcher that
+            # took over the stored address.
+            found = _stable_unique_id(self._metadata)
+            expected = self._reauth_entry.unique_id
+            if expected and found and found != expected:
+                raise AbortFlow("wrong_device")
             return
         unique_id = _stable_unique_id(self._metadata, self._discovery_properties)
         if unique_id:
