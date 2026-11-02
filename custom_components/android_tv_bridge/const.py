@@ -48,6 +48,7 @@ EVENT_MAP = {
     "command_result": EVENT_COMMAND_RESULT,
     "popup_shown": f"{DOMAIN}.popup_shown",
     "popup_dismissed": f"{DOMAIN}.popup_dismissed",
+    "popup_action": f"{DOMAIN}.popup_action",
     "profile_changed": f"{DOMAIN}.profile_changed",
     "web_action": f"{DOMAIN}.web_action",
     "home_config_changed": f"{DOMAIN}.home_config_changed",

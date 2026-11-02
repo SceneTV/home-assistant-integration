@@ -331,6 +331,31 @@ show_popup:
       selector:
         text:
           multiline: true
+    actions:
+      name: Buttons
+      description: >-
+        Up to 3 buttons, each {id, label, style, default, data}. style is default,
+        primary or destructive. A Dismiss button is always added and gets focus unless
+        one action sets default to true. A press fires android_tv_bridge.popup_action
+        with action_id, popup_id and data. Buttons make the popup take remote focus,
+        and duration_ms defaults to 30000.
+      example: >-
+        [{"id": "unlock", "label": "Unlock", "style": "destructive"},
+        {"id": "snooze", "label": "Snooze 10 min"}]
+      selector:
+        object:
+    popup_id:
+      name: Popup ID
+      description: >-
+        Optional id echoed in popup_shown, popup_action and popup_dismissed events.
+        Generated when left out; use response_variable to read it.
+      selector:
+        text:
+    dismiss_label:
+      name: Dismiss label
+      description: Label of the built-in Dismiss button when buttons are set. Defaults to Dismiss.
+      selector:
+        text:
     duration_ms:
       selector:
         number:
@@ -425,6 +450,31 @@ show_image:
       selector:
         text:
           multiline: true
+    actions:
+      name: Buttons
+      description: >-
+        Up to 3 buttons, each {id, label, style, default, data}. style is default,
+        primary or destructive. A Dismiss button is always added and gets focus unless
+        one action sets default to true. A press fires android_tv_bridge.popup_action
+        with action_id, popup_id and data. Buttons make the popup take remote focus,
+        and duration_ms defaults to 30000.
+      example: >-
+        [{"id": "unlock", "label": "Unlock", "style": "destructive"},
+        {"id": "snooze", "label": "Snooze 10 min"}]
+      selector:
+        object:
+    popup_id:
+      name: Popup ID
+      description: >-
+        Optional id echoed in popup_shown, popup_action and popup_dismissed events.
+        Generated when left out; use response_variable to read it.
+      selector:
+        text:
+    dismiss_label:
+      name: Dismiss label
+      description: Label of the built-in Dismiss button when buttons are set. Defaults to Dismiss.
+      selector:
+        text:
     duration_ms:
       selector:
         number:

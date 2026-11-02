@@ -86,7 +86,9 @@ async def test_area_target(hass: HomeAssistant) -> None:
         target={"area_id": ctx["area"].id},
         blocking=True,
     )
-    assert ctx["runtimes"][0].commands == [("show_popup", {"text": "Dinner"}, None)]
+    [(command, payload, timeout)] = ctx["runtimes"][0].commands
+    assert (command, payload["text"], timeout) == ("show_popup", "Dinner", None)
+    assert payload["popup_id"]  # always generated, see test_popup_actions.py
     assert ctx["runtimes"][1].commands == []
 
 
