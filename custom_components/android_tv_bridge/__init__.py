@@ -34,8 +34,17 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data[DOMAIN][entry.entry_id] = runtime
     async_register_services(hass)
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
+    try:
+        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    except Exception:
+        hass.data[DOMAIN].pop(entry.entry_id, None)
+        await runtime.async_stop()
+        raise
+    # No update listener: the config and reconfigure flows reload the entry
+    # themselves, and the options flow has no options. A listener that called
+    # async_unload_entry/async_setup_entry directly would also stack up one
+    # extra listener per reload, because unload callbacks only run when the
+    # config entries machinery unloads the entry.
     return True
 
 
@@ -52,9 +61,3 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         if not hass.data[DOMAIN]:
             async_unregister_services(hass)
     return unload_ok
-
-
-async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Reload a config entry."""
-    await async_unload_entry(hass, entry)
-    await async_setup_entry(hass, entry)
