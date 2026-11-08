@@ -159,3 +159,33 @@ async def test_popup_action_reaches_the_bus(hass: HomeAssistant) -> None:
     assert data["action_id"] == "unlock"
     assert data["popup_id"] == "door-1"
     assert data["data"] == {"lock": "lock.front_door"}
+
+
+async def test_show_popup_sends_html_fields(hass: HomeAssistant) -> None:
+    ctx = await _setup(hass)
+    await hass.services.async_call(
+        DOMAIN,
+        "show_popup",
+        {
+            "entry_id": ctx["entries"][0].entry_id,
+            "html": "<style>b{color:red}</style><b id=t></b><script>t.textContent='hi'</script>",
+            "allow_javascript": True,
+            "interactive": False,
+            "width_dp": 600,
+            "height_dp": 300,
+        },
+        blocking=True,
+        return_response=True,
+    )
+    [(command, payload, _)] = ctx["runtimes"][0].commands
+    assert command == "show_popup"
+    assert payload["html"].startswith("<style>")
+    assert payload["allow_javascript"] is True
+    assert payload["interactive"] is False
+    assert (payload["width_dp"], payload["height_dp"]) == (600, 300)
+
+
+def test_show_popup_accepts_html_alone_but_not_nothing() -> None:
+    assert SERVICE_SCHEMAS["show_popup"]({"html": "<b>x</b>"})["html"] == "<b>x</b>"
+    with pytest.raises(vol.Invalid):
+        SERVICE_SCHEMAS["show_popup"]({"color": "red"})
