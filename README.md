@@ -288,10 +288,14 @@ true`; older launchers ignore `actions` and show a plain popup.
 ## Web popups
 
 `android_tv_bridge.show_web_popup` shows inline HTML or a web page. Give exactly
-one of `html` or `url` (HTTPS, or HTTP on a private or local address). This
-popup only appears while the SceneTV launcher is in the foreground; use
-`show_popup` or `show_image` for popups over other apps. Requires the launcher's
-Home Assistant popups setting to be on.
+one of `html` or `url` (HTTPS, or HTTP on a private or local address). It is the
+same native popup as `show_popup`, so it shows over any app; it defaults to the
+center position. `show_popup` and `show_image` also take an `html` body with
+`allow_javascript`, `interactive`, `width_dp` and `height_dp`. Scripts run unless
+`allow_javascript` is false; `interactive` only gives the page remote focus.
+Requires the launcher's Home Assistant popups setting and overlay permission
+(SceneTV launcher with HTML popups; older launchers show web popups only over
+the launcher).
 
 ```yaml
 action: android_tv_bridge.show_web_popup

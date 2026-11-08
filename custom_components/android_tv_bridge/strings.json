@@ -148,7 +148,7 @@
     },
     "show_web_popup": {
       "name": "Show web popup",
-      "description": "Show an HTML or URL popup on SceneTV. It appears only while the SceneTV launcher is in the foreground. Provide exactly one of html or url.",
+      "description": "Show an HTML or URL popup on SceneTV, over any app (the same popup as Show popup). Provide exactly one of html or url.",
       "fields": {
         "entry_id": {
           "name": "Config entry ID",
