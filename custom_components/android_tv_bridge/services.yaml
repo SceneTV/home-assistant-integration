@@ -274,7 +274,7 @@ show_popup:
       selector:
         text:
     text:
-      description: Popup body text. Required unless a title is provided.
+      description: Popup body text. Required unless a title or HTML is provided.
       selector:
         text:
           multiline: true
@@ -356,6 +356,43 @@ show_popup:
       description: Label of the built-in Dismiss button when buttons are set. Defaults to Dismiss.
       selector:
         text:
+    html:
+      name: HTML
+      description: >-
+        Optional HTML body with CSS and JavaScript, drawn inside the popup so it shows
+        over any app, with the same position, buttons and timeout. Enough on its own
+        (title and text become optional). A full page (doctype or html tag) loads as is.
+      example: "<style>b{color:#4da3ff}</style><b>Doorbell</b>"
+      selector:
+        text:
+          multiline: true
+    allow_javascript:
+      name: Allow JavaScript
+      description: Let the HTML run scripts. Defaults to on. Separate from Interactive.
+      default: true
+      selector:
+        boolean:
+    interactive:
+      name: Interactive
+      description: >-
+        The HTML takes remote focus (OK goes to the page, Back still closes). Pages
+        can send actions back with SceneTV.postAction (android_tv_bridge.web_action).
+      selector:
+        boolean:
+    width_dp:
+      description: Width of the HTML area in dp (default 420).
+      selector:
+        number:
+          min: 120
+          max: 2000
+          mode: box
+    height_dp:
+      description: Height of the HTML area in dp (default 240).
+      selector:
+        number:
+          min: 120
+          max: 2000
+          mode: box
     duration_ms:
       selector:
         number:
@@ -475,6 +512,43 @@ show_image:
       description: Label of the built-in Dismiss button when buttons are set. Defaults to Dismiss.
       selector:
         text:
+    html:
+      name: HTML
+      description: >-
+        Optional HTML body with CSS and JavaScript, drawn inside the popup so it shows
+        over any app, with the same position, buttons and timeout. Enough on its own
+        (title and text become optional). A full page (doctype or html tag) loads as is.
+      example: "<style>b{color:#4da3ff}</style><b>Doorbell</b>"
+      selector:
+        text:
+          multiline: true
+    allow_javascript:
+      name: Allow JavaScript
+      description: Let the HTML run scripts. Defaults to on. Separate from Interactive.
+      default: true
+      selector:
+        boolean:
+    interactive:
+      name: Interactive
+      description: >-
+        The HTML takes remote focus (OK goes to the page, Back still closes). Pages
+        can send actions back with SceneTV.postAction (android_tv_bridge.web_action).
+      selector:
+        boolean:
+    width_dp:
+      description: Width of the HTML area in dp (default 420).
+      selector:
+        number:
+          min: 120
+          max: 2000
+          mode: box
+    height_dp:
+      description: Height of the HTML area in dp (default 240).
+      selector:
+        number:
+          min: 120
+          max: 2000
+          mode: box
     duration_ms:
       selector:
         number:
@@ -608,6 +682,10 @@ show_web_popup:
           max: 2000
           mode: box
     interactive:
+      selector:
+        boolean:
+    allow_javascript:
+      default: true
       selector:
         boolean:
     timeout_ms:

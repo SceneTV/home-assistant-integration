@@ -196,6 +196,12 @@ def _popup_fields(*, include_image: bool) -> dict[Any, Any]:
         vol.Optional("actions"): _popup_actions,
         vol.Optional("popup_id"): _popup_token,
         vol.Optional("dismiss_label"): _POPUP_LABEL,
+        # Optional HTML body (HTML, CSS, JavaScript) drawn inside the popup, over any app.
+        vol.Optional("html"): cv.string,
+        vol.Optional("allow_javascript"): cv.boolean,
+        vol.Optional("interactive"): cv.boolean,
+        vol.Optional("width_dp"): _web_dimension,
+        vol.Optional("height_dp"): _web_dimension,
         vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int,
     }
     if include_image:
@@ -333,6 +339,7 @@ SERVICE_SCHEMAS = {
         vol.Any(
             vol.Schema({vol.Required("text"): object}, extra=vol.ALLOW_EXTRA),
             vol.Schema({vol.Required("title"): object}, extra=vol.ALLOW_EXTRA),
+            vol.Schema({vol.Required("html"): object}, extra=vol.ALLOW_EXTRA),
         ),
     ),
     SERVICE_SHOW_IMAGE: vol.All(
@@ -367,6 +374,7 @@ SERVICE_SCHEMAS = {
                 vol.Optional("width_dp"): _web_dimension,
                 vol.Optional("height_dp"): _web_dimension,
                 vol.Optional("interactive"): cv.boolean,
+                vol.Optional("allow_javascript"): cv.boolean,
                 vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int,
             }
         ),
@@ -567,6 +575,11 @@ def _popup_payload(call: ServiceCall) -> dict[str, Any]:
         "image_base64",
         "duration_ms",
         "dismiss_label",
+        "html",
+        "allow_javascript",
+        "interactive",
+        "width_dp",
+        "height_dp",
     ):
         if field in call.data:
             payload[field] = call.data[field]
@@ -591,6 +604,7 @@ def _web_popup_payload(call: ServiceCall) -> dict[str, Any]:
         "width_dp",
         "height_dp",
         "interactive",
+        "allow_javascript",
     ):
         if field in call.data:
             payload[field] = call.data[field]

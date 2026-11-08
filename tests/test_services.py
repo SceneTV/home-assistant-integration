@@ -146,6 +146,7 @@ async def test_show_web_popup_payload(hass: HomeAssistant) -> None:
             "duration_ms": 8000,
             "width_dp": 400,
             "interactive": True,
+            "allow_javascript": False,
             "timeout_ms": 5000,
         },
         blocking=True,
@@ -160,6 +161,7 @@ async def test_show_web_popup_payload(hass: HomeAssistant) -> None:
                 "duration_ms": 8000,
                 "width_dp": 400,
                 "interactive": True,
+                "allow_javascript": False,
             },
             5000,
         )

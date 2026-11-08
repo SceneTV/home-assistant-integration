@@ -186,6 +186,10 @@
           "name": "Interactive",
           "description": "Let the remote focus and click inside the popup. Pages can send actions back with SceneTV.postAction, which arrive as android_tv_bridge.web_action events."
         },
+        "allow_javascript": {
+          "name": "Allow JavaScript",
+          "description": "Let the HTML run scripts. Defaults to on. Separate from Interactive, which is only about remote focus."
+        },
         "timeout_ms": {
           "name": "Command timeout",
           "description": "How long to wait for the launcher to answer, in milliseconds."
