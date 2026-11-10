@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -13,8 +13,10 @@ from homeassistant.data_entry_flow import FlowResultType
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 
 from custom_components.android_tv_bridge.client import (
+    AndroidTVBridgeAuthError,
     AndroidTVBridgeConnectionError,
 )
+from custom_components.android_tv_bridge.remote_v2 import RemoteV2InvalidCode
 from custom_components.android_tv_bridge.const import (
     CONF_API_VERSION,
     CONF_TOKEN,
@@ -48,68 +50,129 @@ def client():
     with patch(CLIENT) as cls:
         instance = cls.return_value
         instance.async_get_metadata = AsyncMock(return_value=METADATA)
-        instance.async_request_pairing = AsyncMock(
-            return_value={"status": "pending", "request_id": "req-1"}
-        )
-        instance.async_get_pairing_status = AsyncMock(
-            return_value={"status": "approved", "token": "new-token"}
-        )
+        instance.async_link_pairing = AsyncMock(return_value={"token": "new-token"})
         yield instance
 
 
-async def test_user_flow_pairs_and_creates_entry(
-    hass: HomeAssistant, client, mock_setup_entry
-) -> None:
+REMOTE = "custom_components.android_tv_bridge.config_flow.RemoteV2Pairing"
+
+
+@pytest.fixture
+def remote():
+    """Patch the Remote v2 pairing; by default the TV asks for a code."""
+    with patch(REMOTE) as cls:
+        instance = cls.return_value
+        instance.async_start = AsyncMock(return_value=True)
+        instance.async_finish = AsyncMock()
+        instance.async_send_link = AsyncMock()
+        instance.close = MagicMock()
+        yield instance
+
+
+@pytest.fixture(autouse=True)
+def fast_link_retry():
+    with patch("custom_components.android_tv_bridge.config_flow.LINK_RETRY_SECONDS", 0):
+        yield
+
+
+async def _to_code_step(hass: HomeAssistant):
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": config_entries.SOURCE_USER}
     )
-    assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "user"
-
-    result = await hass.config_entries.flow.async_configure(
+    return await hass.config_entries.flow.async_configure(
         result["flow_id"],
         {CONF_HOST: "192.0.2.10", CONF_PORT: 8765, CONF_NAME: "SceneTV"},
     )
+
+
+async def test_user_flow_pairs_with_code_and_creates_entry(
+    hass: HomeAssistant, client, remote, mock_setup_entry
+) -> None:
+    result = await _to_code_step(hass)
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "pair"
 
-    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"code": "1a2b3c"}
+    )
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["title"] == "Living Room TV"
     assert result["data"][CONF_TOKEN] == "new-token"
     assert result["result"].unique_id == "launcher-1"
+    remote.async_finish.assert_awaited_once_with("1A2B3C")
+    remote.close.assert_called()
+    # The nonce in the link is the one traded for the token.
+    link = remote.async_send_link.await_args.args[0]
+    nonce = client.async_link_pairing.await_args.kwargs["nonce"]
+    assert link.startswith("scenetv://pair?n=" + nonce + "&c=")
+    assert client.async_link_pairing.await_args.kwargs["ha_instance_id"] in link
 
 
-async def test_user_flow_pairing_still_pending(
-    hass: HomeAssistant, client, mock_setup_entry
+async def test_user_flow_wrong_code_shows_error(
+    hass: HomeAssistant, client, remote, mock_setup_entry
 ) -> None:
-    client.async_get_pairing_status.return_value = {"status": "pending"}
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": config_entries.SOURCE_USER}
-    )
+    remote.async_finish.side_effect = RemoteV2InvalidCode("wrong")
+    result = await _to_code_step(hass)
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"],
-        {CONF_HOST: "192.0.2.10", CONF_PORT: 8765, CONF_NAME: "SceneTV"},
+        result["flow_id"], {"code": "AAAAAA"}
     )
-    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
     assert result["type"] is FlowResultType.FORM
-    assert result["errors"] == {"base": "pairing_pending"}
+    assert result["step_id"] == "pair"
+    assert result["errors"] == {"base": "invalid_code"}
+    client.async_link_pairing.assert_not_awaited()
 
 
-async def test_user_flow_rejected_on_tv(
-    hass: HomeAssistant, client, mock_setup_entry
+async def test_user_flow_malformed_code_never_reaches_tv(
+    hass: HomeAssistant, client, remote, mock_setup_entry
 ) -> None:
-    client.async_get_pairing_status.return_value = {"status": "rejected"}
-    result = await hass.config_entries.flow.async_init(
-        DOMAIN, context={"source": config_entries.SOURCE_USER}
-    )
+    result = await _to_code_step(hass)
     result = await hass.config_entries.flow.async_configure(
-        result["flow_id"],
-        {CONF_HOST: "192.0.2.10", CONF_PORT: 8765, CONF_NAME: "SceneTV"},
+        result["flow_id"], {"code": "12"}
     )
-    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["errors"] == {"base": "invalid_code"}
+    remote.async_finish.assert_not_awaited()
+
+
+async def test_user_flow_already_paired_skips_code(
+    hass: HomeAssistant, client, remote, mock_setup_entry
+) -> None:
+    remote.async_start.return_value = False
+    result = await _to_code_step(hass)
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result["data"][CONF_TOKEN] == "new-token"
+
+
+async def test_user_flow_waits_for_launcher_to_receive_link(
+    hass: HomeAssistant, client, remote, mock_setup_entry
+) -> None:
+    client.async_link_pairing.side_effect = [
+        AndroidTVBridgeAuthError("not yet"),
+        AndroidTVBridgeAuthError("not yet"),
+        {"token": "new-token"},
+    ]
+    result = await _to_code_step(hass)
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"code": "1A2B3C"}
+    )
+    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert client.async_link_pairing.await_count == 3
+
+
+async def test_user_flow_aborts_when_launcher_never_gets_link(
+    hass: HomeAssistant, client, remote, mock_setup_entry
+) -> None:
+    client.async_link_pairing.side_effect = AndroidTVBridgeAuthError("no")
+    with patch(
+        "custom_components.android_tv_bridge.config_flow.LINK_MAX_WAIT_SECONDS", 0
+    ):
+        result = await _to_code_step(hass)
+        result = await hass.config_entries.flow.async_configure(
+            result["flow_id"], {"code": "1A2B3C"}
+        )
     assert result["type"] is FlowResultType.ABORT
-    assert result["reason"] == "pairing_rejected"
+    assert result["reason"] == "link_failed"
+    remote.close.assert_called()
 
 
 async def test_user_flow_cannot_connect(
@@ -157,7 +220,7 @@ async def _start_reauth(hass: HomeAssistant, entry: MockConfigEntry):
 
 
 async def test_reauth_repairs_and_updates_token(
-    hass: HomeAssistant, client, mock_setup_entry
+    hass: HomeAssistant, client, remote, mock_setup_entry
 ) -> None:
     entry = MockConfigEntry(domain=DOMAIN, unique_id="launcher-1", data=ENTRY_DATA)
     entry.add_to_hass(hass)
@@ -170,7 +233,9 @@ async def test_reauth_repairs_and_updates_token(
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "pair"
 
-    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    result = await hass.config_entries.flow.async_configure(
+        result["flow_id"], {"code": "1A2B3C"}
+    )
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "reauth_successful"
     assert entry.data[CONF_TOKEN] == "new-token"

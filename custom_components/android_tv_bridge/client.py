@@ -120,25 +120,26 @@ class AndroidTVBridgeClient:
         """Fetch an authenticated state snapshot."""
         return await self._request_json("GET", "/state")
 
-    async def async_request_pairing(
+    async def async_link_pairing(
         self,
         *,
         ha_instance_id: str,
         ha_name: str,
+        nonce: str,
     ) -> dict[str, Any]:
-        """Ask the launcher to show a pairing approval prompt."""
+        """Trade a nonce delivered through Remote v2 for a bridge token.
+
+        Raises AndroidTVBridgeAuthError until the launcher has received the link.
+        """
         return await self._request_json(
             "POST",
-            "/pairing/request",
-            json={"ha_instance_id": ha_instance_id, "ha_name": ha_name},
-            authenticated=False,
-        )
-
-    async def async_get_pairing_status(self, request_id: str) -> dict[str, Any]:
-        """Fetch the status for a pending pairing request."""
-        return await self._request_json(
-            "GET",
-            f"/pairing/status/{request_id}",
+            "/pairing/link",
+            json={
+                "client_type": "home_assistant",
+                "client_id": ha_instance_id,
+                "client_name": ha_name,
+                "nonce": nonce,
+            },
             authenticated=False,
         )
 
