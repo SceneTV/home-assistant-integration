@@ -17,9 +17,20 @@ def auto_enable_custom_integrations(enable_custom_integrations: Any) -> None:
 class FakeRuntime:
     """Records commands instead of talking to a launcher."""
 
-    def __init__(self, name: str, *, fail: bool = False) -> None:
+    def __init__(
+        self,
+        name: str,
+        *,
+        fail: bool = False,
+        capabilities: dict[str, Any] | None = None,
+    ) -> None:
         self.device_name = name
         self.fail = fail
+        self.capabilities = (
+            capabilities
+            if capabilities is not None
+            else {"commands": ["show_popup", "play_voice_clip"]}
+        )
         self.commands: list[tuple[str, dict[str, Any], int | None]] = []
 
     async def async_send_command(

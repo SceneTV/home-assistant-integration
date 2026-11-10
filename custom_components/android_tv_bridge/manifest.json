@@ -1,7 +1,7 @@
 {
   "domain": "android_tv_bridge",
   "name": "SceneTV Android TV Bridge",
-  "after_dependencies": ["zeroconf"],
+  "after_dependencies": ["media_source", "zeroconf"],
   "codeowners": ["@thgrace"],
   "config_flow": true,
   "documentation": "https://github.com/SceneTV/home-assistant-integration",

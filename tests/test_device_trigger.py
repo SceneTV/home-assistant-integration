@@ -237,3 +237,15 @@ async def test_unsupported_extra_field_is_rejected(
         hass, {**base, "type": "app_opened", "package": "com.plex"}
     )
     assert config["package"] == "com.plex"
+
+
+async def test_voice_clip_played_fires_for_this_tv_only(
+    hass: HomeAssistant, device: dr.DeviceEntry, calls: list[ServiceCall]
+) -> None:
+    await _automation(hass, device.id, "voice_clip_played")
+
+    _fire(hass, "voice_clip_finished", {"clip_id": "c1", "listened_ms": 4200})
+    _fire(hass, "voice_clip_finished", {"clip_id": "c2"}, launcher_id=OTHER_LAUNCHER_ID)
+    await hass.async_block_till_done()
+
+    assert len(calls) == 1

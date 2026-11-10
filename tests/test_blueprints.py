@@ -40,6 +40,14 @@ INPUTS: dict[str, dict[str, Any]] = {
         "tv": DEVICE,
         "ha_url": "http://192.168.1.10:8123",
     },
+    "announce_on_tv.yaml": {
+        "announce_trigger": [
+            {"trigger": "state", "entity_id": "lock.front_door", "to": "unlocked"}
+        ],
+        "message": "Front door unlocked",
+        "tts_engine": "tts.home_assistant_cloud",
+        "tv": DEVICE,
+    },
     "presence_profile.yaml": {
         "person": "person.tyler",
         "profile_select": "select.living_room_tv_active_profile",
@@ -176,3 +184,63 @@ async def test_movie_mode_dims_lights_on_playback(
     assert scene_create[0].data["snapshot_entities"] == ["light.living_room"]
     assert len(light_off) == 1
     assert light_off[0].data["entity_id"] == ["light.living_room"]
+
+
+async def test_announce_on_tv_sends_tts_voice_clip(
+    hass: HomeAssistant, request: pytest.FixtureRequest
+) -> None:
+    """End to end: the trigger calls play_voice_clip with an encoded TTS media id."""
+    target = Path(hass.config.path("blueprints", "automation", DOMAIN))
+    target.mkdir(parents=True, exist_ok=True)
+    shutil.copy(BLUEPRINT_DIR / "announce_on_tv.yaml", target / "announce_on_tv.yaml")
+    request.addfinalizer(lambda: shutil.rmtree(target, ignore_errors=True))
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="launcher-1",
+        data={CONF_HOST: "192.168.1.50", CONF_PORT: 8765, "token": "t"},
+    )
+    entry.add_to_hass(hass)
+    device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id, identifiers={(DOMAIN, "launcher-1")}
+    )
+    calls = async_mock_service(hass, DOMAIN, "play_voice_clip")
+
+    assert await async_setup_component(
+        hass,
+        automation.DOMAIN,
+        {
+            automation.DOMAIN: {
+                "id": "under_test",
+                "alias": "Under test",
+                "use_blueprint": {
+                    "path": "android_tv_bridge/announce_on_tv.yaml",
+                    "input": {
+                        "announce_trigger": [
+                            {
+                                "trigger": "state",
+                                "entity_id": "lock.front_door",
+                                "to": "unlocked",
+                            }
+                        ],
+                        "message": "Front door & gate unlocked",
+                        "tts_engine": "tts.home_assistant_cloud",
+                        "language": "en",
+                        "tv": device.id,
+                    },
+                },
+            }
+        },
+    )
+    hass.states.async_set("lock.front_door", "locked")
+    await hass.async_block_till_done()
+    hass.states.async_set("lock.front_door", "unlocked")
+    await hass.async_block_till_done()
+
+    assert len(calls) == 1
+    assert calls[0].data["media_id"] == (
+        "media-source://tts/tts.home_assistant_cloud"
+        "?message=Front%20door%20%26%20gate%20unlocked&language=en"
+    )
+    assert calls[0].data["pause_media"] is True
+    assert calls[0].data["device_id"] == [device.id]

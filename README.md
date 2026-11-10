@@ -314,6 +314,78 @@ With `interactive: true` the remote can focus the page, and the page can call
 `SceneTV.postAction(...)`. Each action arrives in Home Assistant as an
 `android_tv_bridge.web_action` event.
 
+## Voice clips
+
+`android_tv_bridge.play_voice_clip` plays a short audio clip on the TV in a
+popup over any app, for example a recorded message or a spoken announcement.
+Home Assistant never uploads audio: it hands the TV a URL and the TV downloads
+the clip itself, so the TV must be able to reach your Home Assistant address
+(set the internal URL under **Settings** > **System** > **Network**).
+
+Give exactly one of:
+
+- `media_id`: a media source id such as
+  `media-source://media_source/local/dinner.mp3` (a file in your media folder),
+  a TTS media source, a `/local/dinner.mp3` path (the `www` folder) or a
+  `/media/dinner.mp3` path (the media folder). Home Assistant resolves it and,
+  where needed, signs the link so the TV can fetch it without a token.
+- `url`: a direct `http(s)` link to an audio file.
+
+```yaml
+action: android_tv_bridge.play_voice_clip
+target:
+  device_id: 0123456789abcdef
+data:
+  media_id: media-source://media_source/local/dinner.mp3
+  title: Dinner is ready
+  from: Mum
+  pause_media: true
+  actions:
+    - id: coming
+      label: On my way
+response_variable: clip
+```
+
+Other fields: `position` (defaults to center), `autoplay`, `profiles` (only
+show on these profiles, otherwise the clip is dropped), `pause_media`,
+`actions` (up to three buttons, the same format as `show_popup`),
+`popup_id`, `dismiss_label` and `timeout_ms` (how long to wait for the TV to
+answer). The service returns `popup_id` through `response_variable`.
+
+`autoplay` is optional. Leave it out to follow the TV's own setting, which
+plays right away by default; with autoplay off the viewer presses OK to play.
+The TV deletes the clip when the popup closes.
+
+Events: `popup_shown` (with `surface: voice_clip` and `clip_id`),
+`voice_clip_finished` (`clip_id`, `popup_id`, `listened_ms`), `popup_action`
+when a button is pressed and `popup_dismissed` when the popup closes. Match them
+on `popup_id`, or use the **Voice clip played** device trigger.
+
+Requires a launcher that reports `play_voice_clip` in its capabilities and has
+voice clips enabled in its settings. On an older launcher the service fails
+with "does not support voice clips". Launcher errors such as `clip_too_large`,
+`unsupported_audio`, `rate_limited` or `voice_clips_disabled` are reported in
+the service error.
+
+### Speak a message on the TV (text-to-speech)
+
+A `media-source://tts/<engine>?message=...` id makes Home Assistant generate
+the speech and resolve it to a link, so no media player is involved:
+
+```yaml
+action: android_tv_bridge.play_voice_clip
+target:
+  device_id: 0123456789abcdef
+data:
+  media_id: >-
+    media-source://tts/tts.home_assistant_cloud?message={{ "Front door unlocked" | urlencode }}&language=en
+  title: Front door
+  pause_media: true
+```
+
+If you already have a link to the audio, pass it as `url` instead. The
+[Announce on TV blueprint](#blueprints) wraps this for any trigger.
+
 ## Media queue
 
 Queue services drive the launcher's media queue:
@@ -351,6 +423,7 @@ The integration fires these Home Assistant events:
 | `android_tv_bridge.foreground_app_changed` | The foreground app changed |
 | `android_tv_bridge.media_started`, `media_paused`, `media_stopped`, `media_changed` | Media session changes |
 | `android_tv_bridge.popup_shown`, `popup_dismissed` | A popup appeared or closed (`popup_id`; `popup_dismissed` also has `reason`) |
+| `android_tv_bridge.voice_clip_finished` | A voice clip finished playing (`clip_id`, `popup_id`, `listened_ms`, see [Voice clips](#voice-clips)) |
 | `android_tv_bridge.popup_action` | A popup button was pressed (`action_id`, `popup_id`, `data`, see [Popup buttons](#popup-buttons-actionable-popups)) |
 | `android_tv_bridge.profile_changed` | The active SceneTV profile changed |
 | `android_tv_bridge.command_result` | A command finished |
@@ -397,6 +470,7 @@ under **When** > **Device**.
 | Switched profile | `profile_changed` | `profile`, a profile name or id |
 | Showed / dismissed a popup | `popup_shown`, `popup_dismissed` | |
 | Popup button pressed | `popup_action` | `action_id` |
+| Voice clip played | `voice_clip_finished` | |
 | Action tile pressed | `action_tile_pressed` | `action_id` |
 | Web card or popup sent an action | `web_action` | `action_id` (matches `action`) |
 | Started the next queue item / finished the queue | `queue_item_started`, `queue_finished` | |
@@ -414,7 +488,7 @@ triggers:
 The trigger variables include the original event as `trigger.event`, so
 `trigger.event.data` holds the launcher payload.
 
-Popup buttons, action tiles and the idle signal need launcher support that is
+Voice clips, popup buttons, action tiles and the idle signal need launcher support that is
 still in progress. Those triggers are listed now and start firing once the
 launcher sends the events; nothing needs to change on the Home Assistant side.
 
@@ -429,6 +503,7 @@ HACS does not install blueprints, so import each one from **Settings** >
 | --- | --- | --- |
 | Movie mode | Dims lights when playback starts, raises them on pause, restores them on stop. Optional app list and after-sunset only. | `https://github.com/SceneTV/home-assistant-integration/blob/main/blueprints/automation/android_tv_bridge/movie_mode.yaml` |
 | Doorbell popup | Shows a camera snapshot over any app when a doorbell or motion sensor fires. Optionally pauses playback. | `https://github.com/SceneTV/home-assistant-integration/blob/main/blueprints/automation/android_tv_bridge/doorbell_popup.yaml` |
+| Announce on TV | Speaks a message on the TV with text-to-speech when any trigger fires, as a voice clip popup. Optionally pauses playback. | `https://github.com/SceneTV/home-assistant-integration/blob/main/blueprints/automation/android_tv_bridge/announce_on_tv.yaml` |
 | Bedtime lock | Warns before bedtime, then stops playback and goes home. Until morning, closes apps opened on the kids profile. | `https://github.com/SceneTV/home-assistant-integration/blob/main/blueprints/automation/android_tv_bridge/bedtime_lock.yaml` |
 | Lights off when idle | Turns lights off after nothing has played for a while (and on the TV's idle trigger once the launcher sends it). | `https://github.com/SceneTV/home-assistant-integration/blob/main/blueprints/automation/android_tv_bridge/lights_off_when_idle.yaml` |
 | Profile from presence | Switches the TV to a person's profile when they come home, and optionally to another when they leave. | `https://github.com/SceneTV/home-assistant-integration/blob/main/blueprints/automation/android_tv_bridge/presence_profile.yaml` |
