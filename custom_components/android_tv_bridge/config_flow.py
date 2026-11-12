@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Mapping
 import logging
+import secrets
 from typing import Any
 
 import voluptuous as vol
@@ -15,7 +17,11 @@ from homeassistant.data_entry_flow import AbortFlow
 from homeassistant.helpers import instance_id, selector
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
-from .client import AndroidTVBridgeClient, AndroidTVBridgeError
+from .client import (
+    AndroidTVBridgeAuthError,
+    AndroidTVBridgeClient,
+    AndroidTVBridgeError,
+)
 from .const import (
     CONF_API_VERSION,
     CONF_EXPOSED_ACTIONS,
@@ -26,7 +32,14 @@ from .const import (
     EXPOSED_ACTION_DOMAINS,
 )
 
+from .remote_v2 import RemoteV2InvalidCode, RemoteV2Pairing, pair_link
+
 _LOGGER = logging.getLogger(__name__)
+
+# The launcher receives the link asynchronously, so the nonce may not be known yet.
+LINK_RETRY_SECONDS = 0.4
+LINK_MAX_WAIT_SECONDS = 6.0
+_CODE_LENGTH = 6
 
 _STABLE_ID_KEYS = (
     "device_id",
@@ -91,7 +104,7 @@ class AndroidTVBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         self._api_version: str = DEFAULT_API_VERSION
         self._metadata: dict[str, Any] = {}
         self._discovery_properties: dict[str, Any] = {}
-        self._pairing_request_id: str | None = None
+        self._remote: RemoteV2Pairing | None = None
         self._reauth_entry: config_entries.ConfigEntry | None = None
 
     async def async_step_user(
@@ -169,22 +182,30 @@ class AndroidTVBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_pair(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Poll a pending TV approval prompt."""
+        """Enter the code the TV's Android TV Remote service shows."""
         errors: dict[str, str] = {}
         if user_input is not None:
-            try:
-                status = await self._async_pairing_status()
-            except AndroidTVBridgeError:
-                errors["base"] = "cannot_connect"
+            code = str(user_input["code"]).strip().upper()
+            if len(code) != _CODE_LENGTH:
+                errors["base"] = "invalid_code"
             else:
-                state = str(status.get("status") or "").lower()
-                if state == "approved" and status.get("token"):
-                    return await self._async_create_entry(str(status["token"]))
-                if state in {"rejected", "expired", "revoked"}:
-                    return self.async_abort(reason=f"pairing_{state}")
-                errors["base"] = "pairing_pending"
+                assert self._remote is not None
+                try:
+                    await self._remote.async_finish(code)
+                except RemoteV2InvalidCode:
+                    errors["base"] = "invalid_code"
+                except AndroidTVBridgeError:
+                    _LOGGER.exception("Remote v2 pairing failed")
+                    errors["base"] = "cannot_connect"
+                else:
+                    return await self._async_link_and_create()
 
-        return self.async_show_form(step_id="pair", errors=errors)
+        return self.async_show_form(
+            step_id="pair",
+            data_schema=vol.Schema({vol.Required("code"): str}),
+            description_placeholders={"name": self._name},
+            errors=errors,
+        )
 
     async def _async_fetch_metadata(self) -> None:
         assert self._host is not None
@@ -214,7 +235,18 @@ class AndroidTVBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         )
 
     async def _async_start_pairing(self) -> config_entries.ConfigFlowResult:
+        """Start Remote v2 pairing; the code the user types is the only approval."""
         assert self._host is not None
+        self._close_remote()
+        self._remote = RemoteV2Pairing(self.hass, self._host)
+        if await self._remote.async_start():
+            return await self.async_step_pair()
+        return await self._async_link_and_create()
+
+    async def _async_link_and_create(self) -> config_entries.ConfigFlowResult:
+        """Prove the Remote v2 pairing to the launcher and store its token."""
+        assert self._host is not None
+        assert self._remote is not None
         client = AndroidTVBridgeClient(
             async_get_clientsession(self.hass),
             self._host,
@@ -222,29 +254,44 @@ class AndroidTVBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             api_version=self._api_version,
         )
         ha_instance_id = await instance_id.async_get(self.hass)
-        response = await client.async_request_pairing(
-            ha_instance_id=ha_instance_id,
-            ha_name=self.hass.config.location_name,
-        )
-        if response.get("status") == "approved" and response.get("token"):
-            return await self._async_create_entry(str(response["token"]))
-        self._pairing_request_id = str(
-            response.get("request_id") or response.get("pairing_request_id") or ""
-        )
-        if not self._pairing_request_id:
-            raise AndroidTVBridgeError("Pairing response did not include a request id")
-        return self.async_show_form(step_id="pair")
+        nonce = secrets.token_urlsafe(16)
+        try:
+            await self._remote.async_send_link(pair_link(nonce, ha_instance_id))
+            waited = 0.0
+            while True:
+                try:
+                    response = await client.async_link_pairing(
+                        ha_instance_id=ha_instance_id,
+                        ha_name=self.hass.config.location_name,
+                        nonce=nonce,
+                    )
+                    break
+                except AndroidTVBridgeAuthError:
+                    # 403 until the launcher has seen the link; the nonce is not spent.
+                    if waited >= LINK_MAX_WAIT_SECONDS:
+                        raise AndroidTVBridgeError(
+                            "The launcher did not receive the pairing link"
+                        ) from None
+                    await asyncio.sleep(LINK_RETRY_SECONDS)
+                    waited += LINK_RETRY_SECONDS
+        except AndroidTVBridgeError:
+            _LOGGER.exception("Could not link Home Assistant to the launcher")
+            return self.async_abort(reason="link_failed")
+        finally:
+            self._close_remote()
+        if not response.get("token"):
+            return self.async_abort(reason="link_failed")
+        return await self._async_create_entry(str(response["token"]))
 
-    async def _async_pairing_status(self) -> dict[str, Any]:
-        assert self._host is not None
-        assert self._pairing_request_id is not None
-        client = AndroidTVBridgeClient(
-            async_get_clientsession(self.hass),
-            self._host,
-            self._port,
-            api_version=self._api_version,
-        )
-        return await client.async_get_pairing_status(self._pairing_request_id)
+    def _close_remote(self) -> None:
+        if self._remote is not None:
+            self._remote.close()
+            self._remote = None
+
+    @callback
+    def async_remove(self) -> None:
+        """Release the TV connection if the flow is abandoned."""
+        self._close_remote()
 
     async def _async_create_entry(self, token: str) -> config_entries.ConfigFlowResult:
         assert self._host is not None
@@ -279,7 +326,7 @@ class AndroidTVBridgeConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     async def async_step_reauth_confirm(
         self, user_input: dict[str, Any] | None = None
     ) -> config_entries.ConfigFlowResult:
-        """Ask the user to approve a new pairing prompt on the TV."""
+        """Pair again through the TV's Android TV Remote service."""
         errors: dict[str, str] = {}
         if user_input is not None:
             try:

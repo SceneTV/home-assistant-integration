@@ -12,16 +12,18 @@
       },
       "zeroconf_confirm": {
         "title": "Add {name}",
-        "description": "Start pairing with this SceneTV launcher?"
+        "description": "Start pairing with this SceneTV launcher? The TV will show a code to enter next."
       },
       "pair": {
-        "title": "Approve pairing",
-        "description": "Approve the pairing prompt on the TV, then submit this form.",
-        "data": {}
+        "title": "Enter the code on the TV",
+        "description": "{name} shows a six character code. Enter it here to pair. The TV asks for nothing else.",
+        "data": {
+          "code": "Code"
+        }
       },
       "reauth_confirm": {
         "title": "Pair {name} again",
-        "description": "{name} rejected the stored pairing token, usually because the Home Assistant pairing was revoked on the TV or the launcher was reinstalled. Submit to show a new pairing prompt on the TV."
+        "description": "{name} rejected the stored pairing token, usually because the Home Assistant pairing was revoked on the TV or the launcher was reinstalled. Submit to pair again; the TV will show a code if needed."
       },
       "reconfigure": {
         "title": "Change launcher address",
@@ -34,14 +36,12 @@
     },
     "error": {
       "cannot_connect": "Could not connect to the launcher.",
-      "pairing_pending": "Pairing is still pending approval on the TV."
+      "invalid_code": "That code does not match the one on the TV."
     },
     "abort": {
       "already_configured": "This SceneTV launcher is already configured.",
       "cannot_connect": "Could not connect to the launcher.",
-      "pairing_rejected": "Pairing was rejected on the TV.",
-      "pairing_expired": "The pairing request expired.",
-      "pairing_revoked": "Pairing was revoked.",
+      "link_failed": "Pairing with the TV's remote service worked, but the launcher did not accept the link. Update the SceneTV launcher and try again.",
       "reauth_successful": "Pairing renewed. The integration has reloaded.",
       "reconfigure_successful": "Address updated. The integration has reloaded.",
       "wrong_device": "That address belongs to a different SceneTV launcher."
