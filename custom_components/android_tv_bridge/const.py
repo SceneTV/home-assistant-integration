@@ -25,6 +25,15 @@ PLATFORMS: list[Platform] = [
 ]
 
 EVENT_COMMAND_RESULT = f"{DOMAIN}.command_result"
+EVENT_GENERIC = f"{DOMAIN}.event"
+
+ATTR_HA_DEVICE_ID = "ha_device_id"
+ATTR_EVENT_TYPE = "event_type"
+
+CONFIGURATION_PATH = "/configure"
+
+CONF_EXPOSED_ACTIONS = "exposed_actions"
+EXPOSED_ACTION_DOMAINS = ("script", "scene")
 
 EVENT_MAP = {
     "foreground_app_changed": f"{DOMAIN}.foreground_app_changed",
@@ -39,5 +48,21 @@ EVENT_MAP = {
     "command_result": EVENT_COMMAND_RESULT,
     "popup_shown": f"{DOMAIN}.popup_shown",
     "popup_dismissed": f"{DOMAIN}.popup_dismissed",
+    "popup_action": f"{DOMAIN}.popup_action",
+    "voice_clip_finished": f"{DOMAIN}.voice_clip_finished",
     "profile_changed": f"{DOMAIN}.profile_changed",
+    "web_action": f"{DOMAIN}.web_action",
+    "home_config_changed": f"{DOMAIN}.home_config_changed",
+    "queue_item_started": f"{DOMAIN}.queue_item_started",
+    "queue_item_finished": f"{DOMAIN}.queue_item_finished",
+    "queue_item_failed": f"{DOMAIN}.queue_item_failed",
+    "queue_paused": f"{DOMAIN}.queue_paused",
+    "queue_finished": f"{DOMAIN}.queue_finished",
+    "action_tile_pressed": f"{DOMAIN}.action_tile_pressed",
 }
+"""Launcher event types with a dedicated Home Assistant event name.
+
+Any other launcher event is fired as ``EVENT_GENERIC`` with the launcher's
+event type in ``event_type`` so new launcher events reach the bus without an
+integration update.
+"""

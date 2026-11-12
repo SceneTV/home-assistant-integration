@@ -11,6 +11,7 @@ from homeassistant.exceptions import ConfigEntryAuthFailed, ConfigEntryNotReady
 
 from .client import AndroidTVBridgeAuthError, AndroidTVBridgeError
 from .const import DOMAIN, PLATFORMS
+from .issues import async_clear_issues
 from .runtime import AndroidTVBridgeRuntime
 from .services import async_register_services, async_unregister_services
 
@@ -33,9 +34,23 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     hass.data[DOMAIN][entry.entry_id] = runtime
     async_register_services(hass)
-    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
-    entry.async_on_unload(entry.add_update_listener(_async_reload_entry))
+    try:
+        await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    except Exception:
+        hass.data[DOMAIN].pop(entry.entry_id, None)
+        await runtime.async_stop()
+        raise
+    # Options (exposed scripts/scenes) only need a fresh catalog on the launcher,
+    # not a reload. Registered with async_on_unload so reloads never stack it.
+    entry.async_on_unload(entry.add_update_listener(_async_options_updated))
     return True
+
+
+async def _async_options_updated(hass: HomeAssistant, entry: ConfigEntry) -> None:
+    """Push the updated action catalog to the launcher."""
+    runtime = hass.data.get(DOMAIN, {}).get(entry.entry_id)
+    if runtime is not None:
+        await runtime.async_push_action_catalog()
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -47,12 +62,7 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         )
         if runtime is not None:
             await runtime.async_stop()
+        async_clear_issues(hass, entry)
         if not hass.data[DOMAIN]:
             async_unregister_services(hass)
     return unload_ok
-
-
-async def _async_reload_entry(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Reload a config entry."""
-    await async_unload_entry(hass, entry)
-    await async_setup_entry(hass, entry)

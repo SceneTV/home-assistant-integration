@@ -10,16 +10,31 @@ import logging
 from typing import Any
 from uuid import uuid4
 
-from aiohttp import ClientWebSocketResponse
+from aiohttp import ClientError, ClientWebSocketResponse
 from aiohttp import WSMsgType
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST, CONF_NAME, CONF_PORT
-from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import HomeAssistantError
+from homeassistant.const import (
+    CONF_HOST,
+    CONF_NAME,
+    CONF_PORT,
+    EVENT_HOMEASSISTANT_STARTED,
+)
+from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant
+from homeassistant.exceptions import ConfigEntryAuthFailed, HomeAssistantError
+from homeassistant.helpers import device_registry as dr
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
+from .actions import (
+    ACTION_EVENT_TYPES,
+    BRIDGE_ACTION_RESULT,
+    BRIDGE_SET_HA_ACTIONS,
+    action_catalog,
+    action_result_payload,
+    async_run_exposed_action,
+    exposed_action_ids,
+)
 from .client import (
     AndroidTVBridgeAuthError,
     AndroidTVBridgeClient,
@@ -27,15 +42,26 @@ from .client import (
     AndroidTVBridgeError,
 )
 from .const import (
+    ATTR_EVENT_TYPE,
+    ATTR_HA_DEVICE_ID,
     CONF_API_VERSION,
     CONF_TOKEN,
+    CONFIGURATION_PATH,
     DEFAULT_API_VERSION,
     DEFAULT_TIMEOUT,
     DOMAIN,
     EVENT_COMMAND_RESULT,
+    EVENT_GENERIC,
     EVENT_MAP,
 )
-from .media_contract import BRIDGE_MEDIA_COMMAND, media_command_payload, milliseconds_to_seconds
+from .issues import async_update_issues
+from .media_contract import (
+    BRIDGE_MEDIA_COMMAND,
+    BRIDGE_VOLUME_COMMAND,
+    media_command_payload,
+    milliseconds_to_seconds,
+    volume_command_payload,
+)
 
 _LOGGER = logging.getLogger(__name__)
 _UPDATE_INTERVAL = timedelta(seconds=30)
@@ -150,6 +176,7 @@ class AndroidTVBridgeRuntime:
         self._ws_task: asyncio.Task[None] | None = None
         self._websocket: ClientWebSocketResponse | None = None
         self._pending: dict[str, asyncio.Future[dict[str, Any]]] = {}
+        self._unsub_started: CALLBACK_TYPE | None = None
 
         self.client = AndroidTVBridgeClient(
             async_get_clientsession(hass),
@@ -162,6 +189,7 @@ class AndroidTVBridgeRuntime:
         self.coordinator = DataUpdateCoordinator(
             hass,
             _LOGGER,
+            config_entry=entry,
             name=DOMAIN,
             update_method=self._async_update_data,
             update_interval=_UPDATE_INTERVAL,
@@ -171,6 +199,16 @@ class AndroidTVBridgeRuntime:
     def device_id(self) -> str:
         """Return the launcher device identifier."""
         return str(self.metadata.get("device_id") or self.entry.unique_id or self.entry.entry_id)
+
+    @property
+    def capabilities(self) -> dict[str, Any]:
+        """Return the launcher capabilities (from metadata, newest state wins)."""
+        merged: dict[str, Any] = {}
+        for source in (self.metadata, self.coordinator.data):
+            caps = source.get("capabilities") if isinstance(source, Mapping) else None
+            if isinstance(caps, Mapping):
+                merged.update(caps)
+        return merged
 
     @property
     def device_name(self) -> str:
@@ -191,7 +229,30 @@ class AndroidTVBridgeRuntime:
             "name": self.device_name,
             "model": self.metadata.get("model") or "Android TV Launcher",
             "sw_version": self.metadata.get("app_version"),
-            "configuration_url": f"http://{self.client.host}:{self.client.port}",
+            "configuration_url": (
+                f"http://{self.client.host}:{self.client.port}{CONFIGURATION_PATH}"
+            ),
+        }
+
+    @property
+    def ha_device_id(self) -> str | None:
+        """Return the Home Assistant device-registry id for this launcher."""
+        device = dr.async_get(self.hass).async_get_device(
+            identifiers={(DOMAIN, self.device_id)}
+        )
+        return device.id if device is not None else None
+
+    def _event_data(self, payload: Mapping[str, Any]) -> dict[str, Any]:
+        """Return the common event data for a launcher event.
+
+        ``device_id`` is the launcher's own id (kept for existing automations);
+        ``ha_device_id`` is the Home Assistant device-registry id.
+        """
+        return {
+            "entry_id": self.entry.entry_id,
+            "device_id": self.device_id,
+            **payload,
+            ATTR_HA_DEVICE_ID: self.ha_device_id,
         }
 
     async def async_start(self) -> None:
@@ -206,6 +267,12 @@ class AndroidTVBridgeRuntime:
             }
         )
 
+        if not self.hass.is_running:
+            # Scripts and scenes may not be loaded yet; resend names once HA is up.
+            self._unsub_started = self.hass.bus.async_listen_once(
+                EVENT_HOMEASSISTANT_STARTED, self._async_on_hass_started
+            )
+
         first_connection: asyncio.Future[None] = self.hass.loop.create_future()
         self._ws_task = self.hass.async_create_task(self._async_listen(first_connection))
         try:
@@ -217,6 +284,9 @@ class AndroidTVBridgeRuntime:
     async def async_stop(self) -> None:
         """Stop the runtime and reject pending commands."""
         self._stopped.set()
+        if self._unsub_started is not None:
+            self._unsub_started()
+            self._unsub_started = None
         if self._ws_task:
             self._ws_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
@@ -230,7 +300,7 @@ class AndroidTVBridgeRuntime:
         try:
             state = await self.client.async_get_state()
         except AndroidTVBridgeAuthError as err:
-            raise UpdateFailed(str(err)) from err
+            raise ConfigEntryAuthFailed(str(err)) from err
         except AndroidTVBridgeError as err:
             if self.coordinator.data is not None:
                 _LOGGER.debug("State refresh failed; keeping WebSocket state: %s", err)
@@ -239,11 +309,13 @@ class AndroidTVBridgeRuntime:
                     "connection": self.connected,
                 }
             raise UpdateFailed(str(err)) from err
-        return {
+        data = {
             **(self.coordinator.data or {}),
             **_clean_state(state),
             "connection": self.connected,
         }
+        async_update_issues(self.hass, self.entry, self.device_name, data)
+        return data
 
     async def _async_listen(
         self,
@@ -258,17 +330,30 @@ class AndroidTVBridgeRuntime:
                 self._merge_state({"connection": True})
                 if first_connection is not None and not first_connection.done():
                     first_connection.set_result(None)
+                # The command result arrives through this loop, so send from a task.
+                self.hass.async_create_task(
+                    self.async_push_action_catalog(), f"{DOMAIN} push action catalog"
+                )
                 async for message in websocket:
                     if message.type == WSMsgType.TEXT:
                         await self._handle_ws_payload(message.json())
                     elif message.type in (WSMsgType.CLOSED, WSMsgType.ERROR):
                         break
+                # The launcher closed the socket without raising: report it,
+                # otherwise entities stay "connected" while the loop sleeps.
+                self.connected = False
+                self._merge_state({"connection": False})
             except AndroidTVBridgeAuthError as err:
                 self.connected = False
                 self._merge_state({"connection": False})
-                _LOGGER.exception("Launcher rejected the stored pairing token")
                 if first_connection is not None and not first_connection.done():
                     first_connection.set_exception(err)
+                    return
+                _LOGGER.warning(
+                    "%s rejected the stored pairing token; starting re-pairing",
+                    self.device_name,
+                )
+                self.entry.async_start_reauth(self.hass)
                 return
             except (AndroidTVBridgeConnectionError, ValueError) as err:
                 self.connected = False
@@ -299,6 +384,11 @@ class AndroidTVBridgeRuntime:
         if message_type in {"event", "transient_event"}:
             event_type = str(body.get("type") or payload.get("event_type") or "")
             self._fire_event(event_type, dict(body))
+            if event_type in ACTION_EVENT_TYPES:
+                self.hass.async_create_task(
+                    self._async_handle_action(dict(body)),
+                    f"{DOMAIN} action {body.get('action_id')}",
+                )
             return
 
         if message_type in {"command_result", "command_ack"}:
@@ -310,22 +400,46 @@ class AndroidTVBridgeRuntime:
                 self._pending.pop(command_id).set_result(result)
             self._fire_event("command_result", result)
 
+    async def _async_on_hass_started(self, _event: Event) -> None:
+        self._unsub_started = None
+        if self.connected:
+            await self.async_push_action_catalog()
+
+    async def async_push_action_catalog(self) -> None:
+        """Send the exposed scripts and scenes to the launcher's tile picker."""
+        catalog = action_catalog(self.hass, exposed_action_ids(self.entry))
+        try:
+            await self.async_send_command(BRIDGE_SET_HA_ACTIONS, {"actions": catalog})
+        except HomeAssistantError as err:
+            # Launchers without action tiles answer "unsupported_command".
+            _LOGGER.debug("Could not send action tiles to the launcher: %s", err)
+
+    async def _async_handle_action(self, payload: dict[str, Any]) -> None:
+        """Run an exposed action for a tile or popup press and report back to tiles."""
+        result = await async_run_exposed_action(self.hass, self.entry, payload)
+        command = action_result_payload(payload, result)
+        if command is None:
+            return
+        try:
+            await self.async_send_command(BRIDGE_ACTION_RESULT, command)
+        except HomeAssistantError as err:
+            _LOGGER.debug("Could not report the action result to the launcher: %s", err)
+
     def _merge_state(self, update: Mapping[str, Any]) -> None:
         current = self.coordinator.data or {}
-        self.coordinator.async_set_updated_data({**current, **dict(update)})
+        merged = {**current, **dict(update)}
+        self.coordinator.async_set_updated_data(merged)
+        async_update_issues(self.hass, self.entry, self.device_name, merged)
 
     def _fire_event(self, event_type: str, payload: dict[str, Any]) -> None:
+        if not event_type:
+            _LOGGER.debug("Ignoring launcher event without a type: %r", payload)
+            return
         event_name = EVENT_MAP.get(event_type)
         if event_name is None:
-            return
-        self.hass.bus.async_fire(
-            event_name,
-            {
-                "entry_id": self.entry.entry_id,
-                "device_id": self.device_id,
-                **payload,
-            },
-        )
+            event_name = EVENT_GENERIC
+            payload = {**payload, ATTR_EVENT_TYPE: event_type}
+        self.hass.bus.async_fire(event_name, self._event_data(payload))
 
     async def async_send_command(
         self,
@@ -357,7 +471,11 @@ class AndroidTVBridgeRuntime:
             self._pending.pop(command_id, None)
             raise HomeAssistantError("Launcher WebSocket is not ready")
 
-        await websocket.send_json(envelope)
+        try:
+            await websocket.send_json(envelope)
+        except (ConnectionError, RuntimeError, ClientError) as err:
+            self._pending.pop(command_id, None)
+            raise HomeAssistantError(f"Could not send command: {err}") from err
         try:
             result = await asyncio.wait_for(future, timeout=timeout)
         except TimeoutError as err:
@@ -367,18 +485,18 @@ class AndroidTVBridgeRuntime:
                 "status": "timed_out",
                 "error": "Timed out waiting for command result",
             }
-            self.hass.bus.async_fire(
-                EVENT_COMMAND_RESULT,
-                {
-                    "entry_id": self.entry.entry_id,
-                    "device_id": self.device_id,
-                    **result,
-                },
-            )
+            self.hass.bus.async_fire(EVENT_COMMAND_RESULT, self._event_data(result))
             raise HomeAssistantError(result["error"]) from err
         if result.get("status") in {"failed", "rejected", "unsupported", "timed_out"}:
             raise HomeAssistantError(str(result.get("error") or result["status"]))
         return result
+
+    async def async_volume_command(self, command: str) -> dict[str, Any]:
+        """Send a volume command (up, down, mute, unmute, toggle_mute)."""
+        return await self.async_send_command(
+            BRIDGE_VOLUME_COMMAND,
+            volume_command_payload(command),
+        )
 
     async def async_media_command(self, command: str) -> dict[str, Any]:
         """Send a media control command to the launcher."""

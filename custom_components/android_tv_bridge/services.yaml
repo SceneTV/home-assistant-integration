@@ -1,12 +1,11 @@
 launch_app:
+  target:
+    entity:
+      integration: android_tv_bridge
   fields:
     entry_id:
       selector:
         text:
-    device_id:
-      selector:
-        device:
-          integration: android_tv_bridge
     package:
       required: true
       selector:
@@ -21,14 +20,13 @@ launch_app:
 launch_activity:
   name: Launch activity
   description: Launch a specific Android app activity on SceneTV.
+  target:
+    entity:
+      integration: android_tv_bridge
   fields:
     entry_id:
       selector:
         text:
-    device_id:
-      selector:
-        device:
-          integration: android_tv_bridge
     package:
       description: Android package name. Required when component is not provided.
       example: com.example.app
@@ -52,14 +50,13 @@ launch_activity:
           mode: box
 
 launch_intent:
+  target:
+    entity:
+      integration: android_tv_bridge
   fields:
     entry_id:
       selector:
         text:
-    device_id:
-      selector:
-        device:
-          integration: android_tv_bridge
     intent_uri:
       required: true
       selector:
@@ -73,14 +70,13 @@ launch_intent:
           mode: box
 
 open_uri:
+  target:
+    entity:
+      integration: android_tv_bridge
   fields:
     entry_id:
       selector:
         text:
-    device_id:
-      selector:
-        device:
-          integration: android_tv_bridge
     uri:
       required: true
       selector:
@@ -95,14 +91,13 @@ open_uri:
 create_deep_link_shortcut:
   name: Create deep-link shortcut
   description: Add a deep-link shortcut tile to the active SceneTV launcher profile.
+  target:
+    entity:
+      integration: android_tv_bridge
   fields:
     entry_id:
       selector:
         text:
-    device_id:
-      selector:
-        device:
-          integration: android_tv_bridge
     title:
       required: true
       description: Shortcut title shown on SceneTV.
@@ -159,17 +154,54 @@ create_deep_link_shortcut:
           max: 60000
           mode: box
 
-send_key:
-  name: Send key
-  description: Send a supported remote-control key event to SceneTV.
+create_action_tile:
+  target:
+    entity:
+      integration: android_tv_bridge
   fields:
     entry_id:
       selector:
         text:
-    device_id:
+    action:
+      example: script.movie_mode
       selector:
-        device:
-          integration: android_tv_bridge
+        entity:
+          domain:
+            - script
+            - scene
+    action_id:
+      example: movie_mode
+      selector:
+        text:
+    title:
+      example: Movie mode
+      selector:
+        text:
+    subtitle:
+      example: Dims the lights
+      selector:
+        text:
+    image_url:
+      selector:
+        text:
+          type: url
+    timeout_ms:
+      selector:
+        number:
+          min: 1000
+          max: 60000
+          mode: box
+
+send_key:
+  name: Send key
+  description: Send a supported remote-control key event to SceneTV.
+  target:
+    entity:
+      integration: android_tv_bridge
+  fields:
+    entry_id:
+      selector:
+        text:
     key:
       name: Key
       description: D-pad key to send. D-pad aliases are accepted.
@@ -200,14 +232,13 @@ send_key:
           mode: box
 
 media_command:
+  target:
+    entity:
+      integration: android_tv_bridge
   fields:
     entry_id:
       selector:
         text:
-    device_id:
-      selector:
-        device:
-          integration: android_tv_bridge
     command:
       required: true
       selector:
@@ -231,20 +262,19 @@ media_command:
 show_popup:
   name: Show popup
   description: Show a text notification popup on SceneTV.
+  target:
+    entity:
+      integration: android_tv_bridge
   fields:
     entry_id:
       selector:
         text:
-    device_id:
-      selector:
-        device:
-          integration: android_tv_bridge
     title:
       description: Optional popup title.
       selector:
         text:
     text:
-      description: Popup body text. Required unless a title is provided.
+      description: Popup body text. Required unless a title or HTML is provided.
       selector:
         text:
           multiline: true
@@ -301,6 +331,68 @@ show_popup:
       selector:
         text:
           multiline: true
+    actions:
+      name: Buttons
+      description: >-
+        Up to 3 buttons, each {id, label, style, default, data}. style is default,
+        primary or destructive. A Dismiss button is always added and gets focus unless
+        one action sets default to true. A press fires android_tv_bridge.popup_action
+        with action_id, popup_id and data. Buttons make the popup take remote focus,
+        and duration_ms defaults to 30000.
+      example: >-
+        [{"id": "unlock", "label": "Unlock", "style": "destructive"},
+        {"id": "snooze", "label": "Snooze 10 min"}]
+      selector:
+        object:
+    popup_id:
+      name: Popup ID
+      description: >-
+        Optional id echoed in popup_shown, popup_action and popup_dismissed events.
+        Generated when left out; use response_variable to read it.
+      selector:
+        text:
+    dismiss_label:
+      name: Dismiss label
+      description: Label of the built-in Dismiss button when buttons are set. Defaults to Dismiss.
+      selector:
+        text:
+    html:
+      name: HTML
+      description: >-
+        Optional HTML body with CSS and JavaScript, drawn inside the popup so it shows
+        over any app, with the same position, buttons and timeout. Enough on its own
+        (title and text become optional). A full page (doctype or html tag) loads as is.
+      example: "<style>b{color:#4da3ff}</style><b>Doorbell</b>"
+      selector:
+        text:
+          multiline: true
+    allow_javascript:
+      name: Allow JavaScript
+      description: Let the HTML run scripts. Defaults to on. Separate from Interactive.
+      default: true
+      selector:
+        boolean:
+    interactive:
+      name: Interactive
+      description: >-
+        The HTML takes remote focus (OK goes to the page, Back still closes). Pages
+        can send actions back with SceneTV.postAction (android_tv_bridge.web_action).
+      selector:
+        boolean:
+    width_dp:
+      description: Width of the HTML area in dp (default 420).
+      selector:
+        number:
+          min: 120
+          max: 2000
+          mode: box
+    height_dp:
+      description: Height of the HTML area in dp (default 240).
+      selector:
+        number:
+          min: 120
+          max: 2000
+          mode: box
     duration_ms:
       selector:
         number:
@@ -317,14 +409,13 @@ show_popup:
 show_image:
   name: Show image popup
   description: Show an image notification popup on SceneTV.
+  target:
+    entity:
+      integration: android_tv_bridge
   fields:
     entry_id:
       selector:
         text:
-    device_id:
-      selector:
-        device:
-          integration: android_tv_bridge
     title:
       description: Optional popup title.
       selector:
@@ -396,6 +487,68 @@ show_image:
       selector:
         text:
           multiline: true
+    actions:
+      name: Buttons
+      description: >-
+        Up to 3 buttons, each {id, label, style, default, data}. style is default,
+        primary or destructive. A Dismiss button is always added and gets focus unless
+        one action sets default to true. A press fires android_tv_bridge.popup_action
+        with action_id, popup_id and data. Buttons make the popup take remote focus,
+        and duration_ms defaults to 30000.
+      example: >-
+        [{"id": "unlock", "label": "Unlock", "style": "destructive"},
+        {"id": "snooze", "label": "Snooze 10 min"}]
+      selector:
+        object:
+    popup_id:
+      name: Popup ID
+      description: >-
+        Optional id echoed in popup_shown, popup_action and popup_dismissed events.
+        Generated when left out; use response_variable to read it.
+      selector:
+        text:
+    dismiss_label:
+      name: Dismiss label
+      description: Label of the built-in Dismiss button when buttons are set. Defaults to Dismiss.
+      selector:
+        text:
+    html:
+      name: HTML
+      description: >-
+        Optional HTML body with CSS and JavaScript, drawn inside the popup so it shows
+        over any app, with the same position, buttons and timeout. Enough on its own
+        (title and text become optional). A full page (doctype or html tag) loads as is.
+      example: "<style>b{color:#4da3ff}</style><b>Doorbell</b>"
+      selector:
+        text:
+          multiline: true
+    allow_javascript:
+      name: Allow JavaScript
+      description: Let the HTML run scripts. Defaults to on. Separate from Interactive.
+      default: true
+      selector:
+        boolean:
+    interactive:
+      name: Interactive
+      description: >-
+        The HTML takes remote focus (OK goes to the page, Back still closes). Pages
+        can send actions back with SceneTV.postAction (android_tv_bridge.web_action).
+      selector:
+        boolean:
+    width_dp:
+      description: Width of the HTML area in dp (default 420).
+      selector:
+        number:
+          min: 120
+          max: 2000
+          mode: box
+    height_dp:
+      description: Height of the HTML area in dp (default 240).
+      selector:
+        number:
+          min: 120
+          max: 2000
+          mode: box
     duration_ms:
       selector:
         number:
@@ -412,14 +565,13 @@ show_image:
 show_camera:
   name: Show camera popup
   description: Show a snapshot popup from a camera configured on SceneTV. Requires a launcher that advertises show_camera.
+  target:
+    entity:
+      integration: android_tv_bridge
   fields:
     entry_id:
       selector:
         text:
-    device_id:
-      selector:
-        device:
-          integration: android_tv_bridge
     camera:
       required: true
       description: Camera id configured in SceneTV camera settings. Stream URLs and credentials stay on the TV.
@@ -478,14 +630,13 @@ show_camera:
           mode: box
 
 dismiss_popup:
+  target:
+    entity:
+      integration: android_tv_bridge
   fields:
     entry_id:
       selector:
         text:
-    device_id:
-      selector:
-        device:
-          integration: android_tv_bridge
     timeout_ms:
       selector:
         number:
@@ -494,14 +645,13 @@ dismiss_popup:
           mode: box
 
 refresh_apps:
+  target:
+    entity:
+      integration: android_tv_bridge
   fields:
     entry_id:
       selector:
         text:
-    device_id:
-      selector:
-        device:
-          integration: android_tv_bridge
     timeout_ms:
       selector:
         number:
@@ -510,14 +660,13 @@ refresh_apps:
           mode: box
 
 set_launcher_mode:
+  target:
+    entity:
+      integration: android_tv_bridge
   fields:
     entry_id:
       selector:
         text:
-    device_id:
-      selector:
-        device:
-          integration: android_tv_bridge
     mode:
       required: true
       selector:
@@ -530,16 +679,293 @@ set_launcher_mode:
           mode: box
 
 select_profile:
+  target:
+    entity:
+      integration: android_tv_bridge
   fields:
     entry_id:
       selector:
         text:
-    device_id:
-      selector:
-        device:
-          integration: android_tv_bridge
     profile:
       required: true
+      selector:
+        text:
+    timeout_ms:
+      selector:
+        number:
+          min: 1000
+          max: 60000
+          mode: box
+
+show_web_popup:
+  target:
+    entity:
+      integration: android_tv_bridge
+  fields:
+    entry_id:
+      selector:
+        text:
+    title:
+      example: Doorbell
+      selector:
+        text:
+    html:
+      example: "<h1>Laundry is done</h1>"
+      selector:
+        text:
+          multiline: true
+    url:
+      example: https://example.com/status
+      selector:
+        text:
+          type: url
+    position:
+      selector:
+        select:
+          options:
+            - top-left
+            - top-right
+            - bottom-left
+            - bottom-right
+            - center
+    duration_ms:
+      selector:
+        number:
+          min: 1000
+          max: 600000
+          step: 1000
+          unit_of_measurement: ms
+          mode: box
+    width_dp:
+      selector:
+        number:
+          min: 120
+          max: 2000
+          mode: box
+    height_dp:
+      selector:
+        number:
+          min: 120
+          max: 2000
+          mode: box
+    interactive:
+      selector:
+        boolean:
+    allow_javascript:
+      default: true
+      selector:
+        boolean:
+    timeout_ms:
+      selector:
+        number:
+          min: 1000
+          max: 60000
+          mode: box
+
+queue_add:
+  target:
+    entity:
+      integration: android_tv_bridge
+  fields:
+    entry_id:
+      selector:
+        text:
+    uri:
+      example: https://www.youtube.com/watch?v=dQw4w9WgXcQ
+      selector:
+        text:
+    package:
+      example: com.google.android.youtube.tv
+      selector:
+        text:
+    title:
+      selector:
+        text:
+    subtitle:
+      selector:
+        text:
+    image_url:
+      selector:
+        text:
+    items:
+      example: '[{"uri": "https://www.youtube.com/watch?v=dQw4w9WgXcQ", "title": "Song"}]'
+      selector:
+        object:
+    position:
+      selector:
+        select:
+          options:
+            - end
+            - next
+    timeout_ms:
+      selector:
+        number:
+          min: 1000
+          max: 60000
+          mode: box
+
+queue_remove:
+  target:
+    entity:
+      integration: android_tv_bridge
+  fields:
+    entry_id:
+      selector:
+        text:
+    item_id:
+      required: true
+      example: qi-0f5c...
+      selector:
+        text:
+    timeout_ms:
+      selector:
+        number:
+          min: 1000
+          max: 60000
+          mode: box
+
+queue_move:
+  target:
+    entity:
+      integration: android_tv_bridge
+  fields:
+    entry_id:
+      selector:
+        text:
+    item_id:
+      required: true
+      selector:
+        text:
+    to_index:
+      required: true
+      selector:
+        number:
+          min: 0
+          max: 1000
+          mode: box
+    timeout_ms:
+      selector:
+        number:
+          min: 1000
+          max: 60000
+          mode: box
+
+queue_clear:
+  target:
+    entity:
+      integration: android_tv_bridge
+  fields:
+    entry_id:
+      selector:
+        text:
+    timeout_ms:
+      selector:
+        number:
+          min: 1000
+          max: 60000
+          mode: box
+
+queue_play:
+  target:
+    entity:
+      integration: android_tv_bridge
+  fields:
+    entry_id:
+      selector:
+        text:
+    item_id:
+      selector:
+        text:
+    timeout_ms:
+      selector:
+        number:
+          min: 1000
+          max: 60000
+          mode: box
+
+queue_next:
+  target:
+    entity:
+      integration: android_tv_bridge
+  fields:
+    entry_id:
+      selector:
+        text:
+    timeout_ms:
+      selector:
+        number:
+          min: 1000
+          max: 60000
+          mode: box
+
+queue_pause:
+  target:
+    entity:
+      integration: android_tv_bridge
+  fields:
+    entry_id:
+      selector:
+        text:
+    timeout_ms:
+      selector:
+        number:
+          min: 1000
+          max: 60000
+          mode: box
+
+play_voice_clip:
+  target:
+    entity:
+      integration: android_tv_bridge
+  fields:
+    entry_id:
+      selector:
+        text:
+    media_id:
+      example: media-source://media_source/local/dinner.mp3
+      selector:
+        text:
+    url:
+      example: http://192.168.1.10:8123/local/dinner.mp3
+      selector:
+        text:
+          type: url
+    title:
+      example: Dinner is ready
+      selector:
+        text:
+    from:
+      example: Mum
+      selector:
+        text:
+    position:
+      selector:
+        select:
+          options:
+            - top-left
+            - top-right
+            - bottom-left
+            - bottom-right
+            - center
+    autoplay:
+      selector:
+        boolean:
+    profiles:
+      example: '["Tyler", "Kids"]'
+      selector:
+        object:
+    pause_media:
+      selector:
+        boolean:
+    actions:
+      example: >-
+        [{"id": "thumbs_up", "label": "On my way"}]
+      selector:
+        object:
+    popup_id:
+      selector:
+        text:
+    dismiss_label:
       selector:
         text:
     timeout_ms:

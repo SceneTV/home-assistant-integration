@@ -12,24 +12,63 @@
       },
       "zeroconf_confirm": {
         "title": "Add {name}",
-        "description": "Start pairing with this SceneTV launcher?"
+        "description": "Start pairing with this SceneTV launcher? The TV will show a code to enter next."
       },
       "pair": {
-        "title": "Approve pairing",
-        "description": "Approve the pairing prompt on the TV, then submit this form.",
-        "data": {}
+        "title": "Enter the code on the TV",
+        "description": "{name} shows a six character code. Enter it here to pair. The TV asks for nothing else.",
+        "data": {
+          "code": "Code"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Pair {name} again",
+        "description": "{name} rejected the stored pairing token, usually because the Home Assistant pairing was revoked on the TV or the launcher was reinstalled. Submit to pair again; the TV will show a code if needed."
+      },
+      "reconfigure": {
+        "title": "Change launcher address",
+        "description": "Update the address if the TV got a new IP address.",
+        "data": {
+          "host": "Host",
+          "port": "Port"
+        }
       }
     },
     "error": {
       "cannot_connect": "Could not connect to the launcher.",
-      "pairing_pending": "Pairing is still pending approval on the TV."
+      "invalid_code": "That code does not match the one on the TV."
     },
     "abort": {
       "already_configured": "This SceneTV launcher is already configured.",
       "cannot_connect": "Could not connect to the launcher.",
-      "pairing_rejected": "Pairing was rejected on the TV.",
-      "pairing_expired": "The pairing request expired.",
-      "pairing_revoked": "Pairing was revoked."
+      "link_failed": "Pairing with the TV's remote service worked, but the launcher did not accept the link. Update the SceneTV launcher and try again.",
+      "reauth_successful": "Pairing renewed. The integration has reloaded.",
+      "reconfigure_successful": "Address updated. The integration has reloaded.",
+      "wrong_device": "That address belongs to a different SceneTV launcher."
+    }
+  },
+  "issues": {
+    "accessibility_disabled": {
+      "title": "SceneTV accessibility service is off on {name}",
+      "description": "Key events, the Home button, in-app profile linking and media controls need the SceneTV accessibility service. On the TV, open Settings > Accessibility (on some TVs Device Preferences > Accessibility), select SceneTV and turn it on. This issue clears itself once the TV reports the service as enabled."
+    },
+    "overlay_permission_missing": {
+      "title": "SceneTV cannot draw over other apps on {name}",
+      "description": "Popup notifications and camera popups only appear over other apps when SceneTV has the \"Display over other apps\" permission. On the TV, open Settings > Apps > Special app access > Display over other apps and allow SceneTV. This issue clears itself once the TV reports the permission."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "SceneTV options",
+        "description": "Pick the scripts and scenes this TV may run. They appear in the TV's /configure page when you add a Home Assistant action tile, and pressing a tile runs them. Every press also fires android_tv_bridge.action_tile_pressed for your own automations.",
+        "data": {
+          "exposed_actions": "Actions the TV can run"
+        },
+        "data_description": {
+          "exposed_actions": "Only these scripts and scenes can be run from the TV. Removing one stops its tiles from running it."
+        }
+      }
     }
   },
   "entity": {
@@ -52,7 +91,9 @@
       "playing": { "name": "Playing" },
       "launcher_visible": { "name": "Launcher visible" },
       "idle": { "name": "Idle" },
-      "accessibility": { "name": "Accessibility" }
+      "accessibility": { "name": "Accessibility" },
+      "overlay_permission": { "name": "Overlay permission" },
+      "popups_enabled": { "name": "Home Assistant popups" }
     },
     "button": {
       "refresh": { "name": "Refresh apps" },
@@ -77,11 +118,7 @@
       "fields": {
         "entry_id": {
           "name": "Config entry ID",
-          "description": "SceneTV config entry to target. Optional when only one launcher is configured."
-        },
-        "device_id": {
-          "name": "Device",
-          "description": "SceneTV device to target. Optional when only one launcher is configured."
+          "description": "SceneTV config entry to target. Optional when you pick a target or only one launcher is configured."
         },
         "camera": {
           "name": "Camera",
@@ -120,6 +157,314 @@
           "description": "How long to wait for the launcher to answer, in milliseconds. Defaults to 12000 because the TV waits for the first snapshot."
         }
       }
+    },
+    "create_action_tile": {
+      "name": "Create action tile",
+      "description": "Add a Home Assistant action tile to the active SceneTV profile. Pressing it runs the script or scene if it is exposed in the integration options, and always fires android_tv_bridge.action_tile_pressed.",
+      "fields": {
+        "entry_id": {
+          "name": "Config entry ID",
+          "description": "SceneTV config entry to target. Optional when you pick a target or only one launcher is configured."
+        },
+        "action": {
+          "name": "Action",
+          "description": "Script or scene the tile runs. Expose it in the integration options too, or the press only fires the event."
+        },
+        "action_id": {
+          "name": "Action ID",
+          "description": "Custom action id for your own automations, used when no script or scene is picked. Letters, digits, and _ . : - (up to 64)."
+        },
+        "title": {
+          "name": "Title",
+          "description": "Tile title. Defaults to the script or scene name."
+        },
+        "subtitle": {
+          "name": "Subtitle",
+          "description": "Optional second line on the tile."
+        },
+        "image_url": {
+          "name": "Image URL",
+          "description": "Optional image shown on the tile instead of the default icon."
+        },
+        "timeout_ms": {
+          "name": "Timeout",
+          "description": "How long to wait for the launcher, in milliseconds."
+        }
+      }
+    },
+    "show_web_popup": {
+      "name": "Show web popup",
+      "description": "Show an HTML or URL popup on SceneTV, over any app (the same popup as Show popup). Provide exactly one of html or url.",
+      "fields": {
+        "entry_id": {
+          "name": "Config entry ID",
+          "description": "SceneTV config entry to target. Optional when you pick a target or only one launcher is configured."
+        },
+        "title": {
+          "name": "Title",
+          "description": "Optional popup title."
+        },
+        "html": {
+          "name": "HTML",
+          "description": "Inline HTML to render. Use this or url."
+        },
+        "url": {
+          "name": "URL",
+          "description": "Page to load. HTTPS, or HTTP on a private or local host. Use this or html."
+        },
+        "position": {
+          "name": "Position",
+          "description": "Where the popup appears on screen. Defaults to center."
+        },
+        "duration_ms": {
+          "name": "Duration",
+          "description": "How long the popup stays visible, in milliseconds (1000 to 600000). Defaults to 5000."
+        },
+        "width_dp": {
+          "name": "Width",
+          "description": "Popup width in dp (120 to 2000)."
+        },
+        "height_dp": {
+          "name": "Height",
+          "description": "Popup height in dp (120 to 2000)."
+        },
+        "interactive": {
+          "name": "Interactive",
+          "description": "Let the remote focus and click inside the popup. Pages can send actions back with SceneTV.postAction, which arrive as android_tv_bridge.web_action events."
+        },
+        "allow_javascript": {
+          "name": "Allow JavaScript",
+          "description": "Let the HTML run scripts. Defaults to on. Separate from Interactive, which is only about remote focus."
+        },
+        "timeout_ms": {
+          "name": "Command timeout",
+          "description": "How long to wait for the launcher to answer, in milliseconds."
+        }
+      }
+    },
+    "queue_add": {
+      "name": "Add to queue",
+      "description": "Add one item (uri plus optional fields) or a list of items to the SceneTV media queue.",
+      "fields": {
+        "entry_id": {
+          "name": "Config entry ID",
+          "description": "SceneTV config entry to target. Optional when you pick a target or only one launcher is configured."
+        },
+        "uri": {
+          "name": "URI",
+          "description": "Media link to queue, for example a YouTube or Plex URL. Use this or items."
+        },
+        "package": {
+          "name": "Package",
+          "description": "Android package that should open the link. The launcher resolves it when omitted."
+        },
+        "title": {
+          "name": "Title",
+          "description": "Optional title shown in the queue."
+        },
+        "subtitle": {
+          "name": "Subtitle",
+          "description": "Optional subtitle shown in the queue."
+        },
+        "image_url": {
+          "name": "Image URL",
+          "description": "Optional artwork URL."
+        },
+        "items": {
+          "name": "Items",
+          "description": "List of items, each with uri and optional package, title, subtitle and image_url. Use this or uri."
+        },
+        "position": {
+          "name": "Position",
+          "description": "end appends; next inserts right after the current item. Defaults to end."
+        },
+        "timeout_ms": {
+          "name": "Command timeout",
+          "description": "How long to wait for the launcher to answer, in milliseconds."
+        }
+      }
+    },
+    "queue_remove": {
+      "name": "Remove from queue",
+      "description": "Remove an item from the SceneTV media queue. Removing the current item pauses the queue.",
+      "fields": {
+        "entry_id": {
+          "name": "Config entry ID",
+          "description": "SceneTV config entry to target. Optional when you pick a target or only one launcher is configured."
+        },
+        "item_id": {
+          "name": "Queue item ID",
+          "description": "Queue item id (qi-...) from the queue state attribute or a queue event."
+        },
+        "timeout_ms": {
+          "name": "Command timeout",
+          "description": "How long to wait for the launcher to answer, in milliseconds."
+        }
+      }
+    },
+    "queue_move": {
+      "name": "Move queue item",
+      "description": "Move a SceneTV media queue item to a new position.",
+      "fields": {
+        "entry_id": {
+          "name": "Config entry ID",
+          "description": "SceneTV config entry to target. Optional when you pick a target or only one launcher is configured."
+        },
+        "item_id": {
+          "name": "Queue item ID",
+          "description": "Queue item id (qi-...) from the queue state attribute or a queue event."
+        },
+        "to_index": {
+          "name": "To index",
+          "description": "New zero-based position in the queue."
+        },
+        "timeout_ms": {
+          "name": "Command timeout",
+          "description": "How long to wait for the launcher to answer, in milliseconds."
+        }
+      }
+    },
+    "queue_clear": {
+      "name": "Clear queue",
+      "description": "Remove every item from the SceneTV media queue.",
+      "fields": {
+        "entry_id": {
+          "name": "Config entry ID",
+          "description": "SceneTV config entry to target. Optional when you pick a target or only one launcher is configured."
+        },
+        "timeout_ms": {
+          "name": "Command timeout",
+          "description": "How long to wait for the launcher to answer, in milliseconds."
+        }
+      }
+    },
+    "queue_play": {
+      "name": "Play queue",
+      "description": "Start the SceneTV media queue at an item, or resume it.",
+      "fields": {
+        "entry_id": {
+          "name": "Config entry ID",
+          "description": "SceneTV config entry to target. Optional when you pick a target or only one launcher is configured."
+        },
+        "item_id": {
+          "name": "Queue item ID",
+          "description": "Optional item to start at. Without it the queue resumes the current item, else the first pending item."
+        },
+        "timeout_ms": {
+          "name": "Command timeout",
+          "description": "How long to wait for the launcher to answer, in milliseconds."
+        }
+      }
+    },
+    "queue_next": {
+      "name": "Skip to next queue item",
+      "description": "Skip the current SceneTV queue item and launch the next pending one.",
+      "fields": {
+        "entry_id": {
+          "name": "Config entry ID",
+          "description": "SceneTV config entry to target. Optional when you pick a target or only one launcher is configured."
+        },
+        "timeout_ms": {
+          "name": "Command timeout",
+          "description": "How long to wait for the launcher to answer, in milliseconds."
+        }
+      }
+    },
+    "queue_pause": {
+      "name": "Pause queue",
+      "description": "Stop the SceneTV media queue from advancing. Does not pause the media itself.",
+      "fields": {
+        "entry_id": {
+          "name": "Config entry ID",
+          "description": "SceneTV config entry to target. Optional when you pick a target or only one launcher is configured."
+        },
+        "timeout_ms": {
+          "name": "Command timeout",
+          "description": "How long to wait for the launcher to answer, in milliseconds."
+        }
+      }
+    },
+    "play_voice_clip": {
+      "name": "Play voice clip",
+      "description": "Play a short audio clip on SceneTV in a popup, over any app. Home Assistant only sends the TV a URL; the TV downloads the clip itself. Give exactly one of media_id or url.",
+      "fields": {
+        "entry_id": {
+          "name": "Config entry ID",
+          "description": "SceneTV config entry to target. Optional when you pick a target or only one launcher is configured."
+        },
+        "media_id": {
+          "name": "Media",
+          "description": "A Home Assistant media source id (media-source://media_source/local/dinner.mp3, or a TTS media source), or a /local/ or /media/ path. Resolved to a URL the TV can fetch."
+        },
+        "url": {
+          "name": "URL",
+          "description": "A direct http(s) URL to an audio file the TV can reach. Use this or media_id."
+        },
+        "title": {
+          "name": "Title",
+          "description": "Popup title."
+        },
+        "from": {
+          "name": "From",
+          "description": "Who the clip is from, shown on the popup."
+        },
+        "position": {
+          "name": "Position",
+          "description": "Where the popup appears on screen. Defaults to center."
+        },
+        "autoplay": {
+          "name": "Autoplay",
+          "description": "Start playing right away. Leave out to use the TV's own setting (autoplay by default); when off, the viewer presses OK to play."
+        },
+        "profiles": {
+          "name": "Profiles",
+          "description": "Only show the clip when one of these SceneTV profiles is active (names or ids). Leave empty for every profile."
+        },
+        "pause_media": {
+          "name": "Pause media",
+          "description": "Pause what is playing while the clip plays and resume afterwards."
+        },
+        "actions": {
+          "name": "Buttons",
+          "description": "Up to 3 buttons, each {id, label, style, default, data}, same as Show popup. A press fires android_tv_bridge.popup_action."
+        },
+        "popup_id": {
+          "name": "Popup ID",
+          "description": "Optional id echoed in popup_shown, voice_clip_finished, popup_action and popup_dismissed events. Generated when left out; use response_variable to read it."
+        },
+        "dismiss_label": {
+          "name": "Dismiss label",
+          "description": "Label of the built-in Dismiss button. Defaults to Dismiss."
+        },
+        "timeout_ms": {
+          "name": "Command timeout",
+          "description": "How long to wait for the launcher to answer, in milliseconds."
+        }
+      }
+    }
+  },
+  "device_automation": {
+    "trigger_type": {
+      "app_opened": "{entity_name} opened an app",
+      "playback_started": "{entity_name} started playing",
+      "playback_paused": "{entity_name} paused playback",
+      "playback_stopped": "{entity_name} stopped playback",
+      "profile_changed": "{entity_name} switched profile",
+      "popup_shown": "{entity_name} showed a popup",
+      "popup_dismissed": "{entity_name} dismissed a popup",
+      "popup_action": "A popup button was pressed on {entity_name}",
+      "voice_clip_played": "{entity_name} finished playing a voice clip",
+      "tile_pressed": "An action tile was pressed on {entity_name}",
+      "web_action": "A web card or popup sent an action on {entity_name}",
+      "queue_item_started": "{entity_name} started the next queue item",
+      "queue_finished": "{entity_name} finished its play queue",
+      "became_idle": "{entity_name} became idle",
+      "became_active": "{entity_name} became active"
+    },
+    "extra_fields": {
+      "package": "App package (optional)",
+      "profile": "Profile name or id (optional)",
+      "action_id": "Action id (optional)"
     }
   }
 }

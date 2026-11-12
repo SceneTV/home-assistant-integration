@@ -1,0 +1,78 @@
+blueprint:
+  name: SceneTV profile from presence
+  description: >-
+    Switch a SceneTV TV to a person's profile when they come home, and
+    optionally back to another profile when they leave.
+  domain: automation
+  source_url: https://github.com/SceneTV/home-assistant-integration/blob/main/blueprints/automation/android_tv_bridge/presence_profile.yaml
+  input:
+    person:
+      name: Person
+      selector:
+        entity:
+          domain:
+            - person
+            - device_tracker
+    profile_select:
+      name: TV profile selector
+      description: The TV's "Active profile" entity.
+      selector:
+        entity:
+          domain: select
+          integration: android_tv_bridge
+    arrive_profile:
+      name: Profile when they arrive
+      description: Profile name exactly as it appears on the TV.
+      selector:
+        text:
+    leave_profile:
+      name: Profile when they leave (optional)
+      description: Leave empty to keep the current profile.
+      default: ""
+      selector:
+        text:
+    only_if_not_playing:
+      name: Don't switch while something is playing
+      description: Uses the TV's "Playing" sensor, if you pick one.
+      default: ""
+      selector:
+        entity:
+          domain: binary_sensor
+          integration: android_tv_bridge
+
+mode: queued
+max: 5
+
+variables:
+  profile_select: !input profile_select
+  arrive_profile: !input arrive_profile
+  leave_profile: !input leave_profile
+  playing_sensor: !input only_if_not_playing
+
+triggers:
+  - trigger: state
+    entity_id: !input person
+    to: home
+    id: arrive
+  - trigger: state
+    entity_id: !input person
+    from: home
+    id: leave
+
+conditions:
+  - condition: template
+    value_template: >-
+      {{ playing_sensor in ['', none] or not is_state(playing_sensor, 'on') }}
+  - condition: template
+    value_template: >-
+      {% set target = arrive_profile if trigger.id == 'arrive' else leave_profile %}
+      {{ target | length > 0
+         and target in (state_attr(profile_select, 'options') or [])
+         and not is_state(profile_select, target) }}
+
+actions:
+  - action: select.select_option
+    target:
+      entity_id: "{{ profile_select }}"
+    data:
+      option: "{{ arrive_profile if trigger.id == 'arrive' else leave_profile }}"

@@ -1,6 +1,5 @@
 {
   "name": "SceneTV Android TV Bridge",
   "render_readme": true,
-  "domains": ["android_tv_bridge"],
-  "homeassistant": "2024.6.0"
+  "homeassistant": "2024.11.0"
 }

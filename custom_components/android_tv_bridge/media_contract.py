@@ -34,6 +34,22 @@ MEDIA_COMMAND_ALIASES = {
     "previous_track": MEDIA_COMMAND_PREVIOUS,
 }
 
+BRIDGE_VOLUME_COMMAND = "volume_command"
+
+VOLUME_COMMAND_UP = "up"
+VOLUME_COMMAND_DOWN = "down"
+VOLUME_COMMAND_MUTE = "mute"
+VOLUME_COMMAND_UNMUTE = "unmute"
+VOLUME_COMMAND_TOGGLE_MUTE = "toggle_mute"
+
+VOLUME_COMMANDS: tuple[str, ...] = (
+    VOLUME_COMMAND_UP,
+    VOLUME_COMMAND_DOWN,
+    VOLUME_COMMAND_MUTE,
+    VOLUME_COMMAND_UNMUTE,
+    VOLUME_COMMAND_TOGGLE_MUTE,
+)
+
 BRIDGE_STATE_PLAYING = "playing"
 BRIDGE_STATE_PAUSED = "paused"
 BRIDGE_STATE_STOPPED = "stopped"
@@ -81,3 +97,26 @@ def milliseconds_to_seconds(value: Any) -> float | None:
         return float(value) / 1000
     except (TypeError, ValueError):
         return None
+
+
+def volume_command_payload(command: Any) -> dict[str, str]:
+    """Build the launcher payload for a volume command."""
+    return {"command": str(command).strip().lower()}
+
+
+def volume_steps(level: Any, maximum: Any, target: float) -> int:
+    """Return signed volume steps to move from ``level`` towards ``target``.
+
+    ``target`` is a Home Assistant volume level between 0 and 1. The launcher
+    only supports relative steps, so ``volume_set`` is emulated with this many
+    ``up`` (positive) or ``down`` (negative) commands.
+    """
+    try:
+        current = int(level)
+        top = int(maximum)
+    except (TypeError, ValueError):
+        return 0
+    if top <= 0:
+        return 0
+    wanted = round(max(0.0, min(1.0, float(target))) * top)
+    return wanted - max(0, min(current, top))
