@@ -201,6 +201,16 @@ class AndroidTVBridgeRuntime:
         return str(self.metadata.get("device_id") or self.entry.unique_id or self.entry.entry_id)
 
     @property
+    def capabilities(self) -> dict[str, Any]:
+        """Return the launcher capabilities (from metadata, newest state wins)."""
+        merged: dict[str, Any] = {}
+        for source in (self.metadata, self.coordinator.data):
+            caps = source.get("capabilities") if isinstance(source, Mapping) else None
+            if isinstance(caps, Mapping):
+                merged.update(caps)
+        return merged
+
+    @property
     def device_name(self) -> str:
         """Return the launcher display name."""
         return str(

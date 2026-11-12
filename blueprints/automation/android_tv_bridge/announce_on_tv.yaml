@@ -1,0 +1,81 @@
+blueprint:
+  name: SceneTV announce on TV
+  description: >-
+    Speak a message on a SceneTV TV when something happens, for example "Front
+    door unlocked". The message is turned into speech by a Home Assistant
+    text-to-speech engine and played from a popup over any app. Needs a launcher
+    with voice clips; Home Assistant only sends the TV a link and the TV
+    downloads the audio itself.
+  domain: automation
+  source_url: https://github.com/SceneTV/home-assistant-integration/blob/main/blueprints/automation/android_tv_bridge/announce_on_tv.yaml
+  input:
+    announce_trigger:
+      name: When to announce
+      description: Any trigger, for example a lock unlocking or a door opening.
+      selector:
+        trigger:
+    message:
+      name: Message to speak
+      default: Someone is at the front door
+      selector:
+        text:
+    tts_engine:
+      name: Text-to-speech engine
+      selector:
+        entity:
+          domain: tts
+    language:
+      name: Language
+      description: Optional language code such as en or de. Empty uses the engine default.
+      default: ""
+      selector:
+        text:
+    tv:
+      name: TV
+      selector:
+        device:
+          integration: android_tv_bridge
+    title:
+      name: Popup title
+      default: Announcement
+      selector:
+        text:
+    position:
+      name: Popup position
+      default: center
+      selector:
+        select:
+          options:
+            - top-left
+            - top-right
+            - bottom-left
+            - bottom-right
+            - center
+    pause_media:
+      name: Pause what is playing
+      description: Pauses playback while the announcement plays and resumes afterwards.
+      default: true
+      selector:
+        boolean:
+
+mode: queued
+max: 5
+
+variables:
+  message: !input message
+  tts_engine: !input tts_engine
+  language: !input language
+
+triggers: !input announce_trigger
+
+actions:
+  - action: android_tv_bridge.play_voice_clip
+    target:
+      device_id: !input tv
+    data:
+      media_id: >-
+        media-source://tts/{{ tts_engine }}?message={{ message | urlencode }}{% if language %}&language={{ language | urlencode }}{% endif %}
+      title: !input title
+      position: !input position
+      pause_media: !input pause_media
+      autoplay: true

@@ -337,6 +337,64 @@
           "description": "How long to wait for the launcher to answer, in milliseconds."
         }
       }
+    },
+    "play_voice_clip": {
+      "name": "Play voice clip",
+      "description": "Play a short audio clip on SceneTV in a popup, over any app. Home Assistant only sends the TV a URL; the TV downloads the clip itself. Give exactly one of media_id or url.",
+      "fields": {
+        "entry_id": {
+          "name": "Config entry ID",
+          "description": "SceneTV config entry to target. Optional when you pick a target or only one launcher is configured."
+        },
+        "media_id": {
+          "name": "Media",
+          "description": "A Home Assistant media source id (media-source://media_source/local/dinner.mp3, or a TTS media source), or a /local/ or /media/ path. Resolved to a URL the TV can fetch."
+        },
+        "url": {
+          "name": "URL",
+          "description": "A direct http(s) URL to an audio file the TV can reach. Use this or media_id."
+        },
+        "title": {
+          "name": "Title",
+          "description": "Popup title."
+        },
+        "from": {
+          "name": "From",
+          "description": "Who the clip is from, shown on the popup."
+        },
+        "position": {
+          "name": "Position",
+          "description": "Where the popup appears on screen. Defaults to center."
+        },
+        "autoplay": {
+          "name": "Autoplay",
+          "description": "Start playing right away. Leave out to use the TV's own setting (autoplay by default); when off, the viewer presses OK to play."
+        },
+        "profiles": {
+          "name": "Profiles",
+          "description": "Only show the clip when one of these SceneTV profiles is active (names or ids). Leave empty for every profile."
+        },
+        "pause_media": {
+          "name": "Pause media",
+          "description": "Pause what is playing while the clip plays and resume afterwards."
+        },
+        "actions": {
+          "name": "Buttons",
+          "description": "Up to 3 buttons, each {id, label, style, default, data}, same as Show popup. A press fires android_tv_bridge.popup_action."
+        },
+        "popup_id": {
+          "name": "Popup ID",
+          "description": "Optional id echoed in popup_shown, voice_clip_finished, popup_action and popup_dismissed events. Generated when left out; use response_variable to read it."
+        },
+        "dismiss_label": {
+          "name": "Dismiss label",
+          "description": "Label of the built-in Dismiss button. Defaults to Dismiss."
+        },
+        "timeout_ms": {
+          "name": "Command timeout",
+          "description": "How long to wait for the launcher to answer, in milliseconds."
+        }
+      }
     }
   },
   "device_automation": {
@@ -349,6 +407,7 @@
       "popup_shown": "{entity_name} showed a popup",
       "popup_dismissed": "{entity_name} dismissed a popup",
       "popup_action": "A popup button was pressed on {entity_name}",
+      "voice_clip_played": "{entity_name} finished playing a voice clip",
       "tile_pressed": "An action tile was pressed on {entity_name}",
       "web_action": "A web card or popup sent an action on {entity_name}",
       "queue_item_started": "{entity_name} started the next queue item",

@@ -107,6 +107,7 @@ SERVICE_SEND_KEY = "send_key"
 SERVICE_MEDIA_COMMAND = "media_command"
 SERVICE_SHOW_POPUP = "show_popup"
 SERVICE_SHOW_IMAGE = "show_image"
+SERVICE_PLAY_VOICE_CLIP = "play_voice_clip"
 SERVICE_DISMISS_POPUP = "dismiss_popup"
 SERVICE_REFRESH_APPS = "refresh_apps"
 SERVICE_SET_LAUNCHER_MODE = "set_launcher_mode"
@@ -349,6 +350,26 @@ SERVICE_SCHEMAS = {
             vol.Schema({vol.Required("image_base64"): object}, extra=vol.ALLOW_EXTRA),
         ),
     ),
+    SERVICE_PLAY_VOICE_CLIP: vol.All(
+        _schema(
+            {
+                vol.Optional("media_id"): vol.All(cv.string, vol.Length(min=1)),
+                vol.Optional("url"): vol.All(cv.string, vol.Length(min=1)),
+                vol.Optional("title"): cv.string,
+                vol.Optional("from"): cv.string,
+                vol.Optional("position"): vol.In(POPUP_POSITIONS),
+                vol.Optional("autoplay"): cv.boolean,
+                vol.Optional("profiles"): vol.All(cv.ensure_list, [cv.string]),
+                vol.Optional("pause_media"): cv.boolean,
+                vol.Optional("actions"): _popup_actions,
+                vol.Optional("popup_id"): _popup_token,
+                vol.Optional("dismiss_label"): _POPUP_LABEL,
+                vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int,
+            }
+        ),
+        cv.has_at_most_one_key("media_id", "url"),
+        cv.has_at_least_one_key("media_id", "url"),
+    ),
     SERVICE_DISMISS_POPUP: _schema({vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int}),
     SERVICE_REFRESH_APPS: _schema({vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int}),
     SERVICE_SET_LAUNCHER_MODE: _schema(
@@ -431,7 +452,9 @@ SERVICE_SCHEMAS = {
 
 
 # Services that return {"popup_id": ...} to a script using response_variable.
-RESPONSE_SERVICES = frozenset({SERVICE_SHOW_POPUP, SERVICE_SHOW_IMAGE})
+RESPONSE_SERVICES = frozenset(
+    {SERVICE_SHOW_POPUP, SERVICE_SHOW_IMAGE, SERVICE_PLAY_VOICE_CLIP}
+)
 
 
 COMMAND_BUILDERS: dict[str, Callable[[ServiceCall], tuple[str, dict[str, Any]]]] = {
@@ -466,6 +489,9 @@ COMMAND_BUILDERS: dict[str, Callable[[ServiceCall], tuple[str, dict[str, Any]]]]
         "show_image",
         _popup_payload(call),
     ),
+    # play_voice_clip is built asynchronously (media source resolution) in the
+    # service handler; this entry only carries the command name.
+    SERVICE_PLAY_VOICE_CLIP: lambda call: ("play_voice_clip", {}),
     SERVICE_DISMISS_POPUP: lambda call: ("dismiss_popup", {}),
     SERVICE_REFRESH_APPS: lambda call: ("refresh_apps", {}),
     SERVICE_SET_LAUNCHER_MODE: lambda call: (
@@ -592,6 +618,99 @@ def _popup_payload(call: ServiceCall) -> dict[str, Any]:
     return payload
 
 
+VOICE_CLIP_ERRORS = {
+    "invalid_payload": "the launcher rejected the voice clip request",
+    "clip_not_found": "the TV could not download the clip (check the URL is reachable from the TV)",
+    "clip_too_large": "the clip is larger than the TV accepts",
+    "unsupported_audio": "the TV cannot play this audio format",
+    "rate_limited": "the TV is receiving voice clips too quickly",
+    "popups_disabled": "Home Assistant popups are turned off in the SceneTV settings",
+    "voice_clips_disabled": "voice clips are turned off in the SceneTV settings",
+    "overlay_permission_required": "SceneTV needs the display-over-other-apps permission",
+}
+
+
+def _voice_clip_source(call: ServiceCall) -> str:
+    """Return the media_id or url to resolve, normalising /media paths."""
+    media_id = call.data.get("media_id")
+    if media_id is None:
+        return call.data["url"].strip()
+    media_id = media_id.strip()
+    if media_id.startswith("/media/"):
+        rest = media_id[len("/media/") :]
+        if not rest.startswith("local/"):
+            rest = f"local/{rest}"
+        return f"media-source://media_source/{rest}"
+    return media_id
+
+
+async def _async_voice_clip_url(hass: HomeAssistant, call: ServiceCall) -> str:
+    """Resolve the clip to an absolute URL the TV can fetch. No bytes pass through HA."""
+    from homeassistant.components import media_source
+    from homeassistant.components.media_player.browse_media import (
+        async_process_play_media_url,
+    )
+
+    source = _voice_clip_source(call)
+    try:
+        if media_source.is_media_source_id(source):
+            source = (await media_source.async_resolve_media(hass, source, None)).url
+        # Signs HA paths and makes them absolute using the Home Assistant URL.
+        url = async_process_play_media_url(hass, source)
+    except HomeAssistantError:
+        raise
+    except Exception as err:  # media_source raises its own error types
+        raise HomeAssistantError(f"Could not resolve the voice clip: {err}") from err
+    if not url.startswith(("http://", "https://")):
+        raise HomeAssistantError(
+            "The voice clip must be an http(s) URL, a media source or a /local/ or /media/ path"
+        )
+    return url
+
+
+async def _async_voice_clip_payload(
+    hass: HomeAssistant, call: ServiceCall
+) -> dict[str, Any]:
+    """Build the play_voice_clip payload (url, never audio bytes)."""
+    payload: dict[str, Any] = {"url": await _async_voice_clip_url(hass, call)}
+    for field in (
+        "title",
+        "from",
+        "position",
+        "autoplay",
+        "pause_media",
+        "dismiss_label",
+    ):
+        if field in call.data:
+            payload[field] = call.data[field]
+    if call.data.get("profiles"):
+        payload["profiles"] = list(call.data["profiles"])
+    if call.data.get("actions"):
+        payload["actions"] = [dict(action) for action in call.data["actions"]]
+    payload["popup_id"] = call.data.get("popup_id") or uuid4().hex
+    return payload
+
+
+def _require_voice_clip_support(runtime: AndroidTVBridgeRuntime) -> None:
+    """Fail clearly when the launcher does not report play_voice_clip."""
+    capabilities = getattr(runtime, "capabilities", None) or {}
+    commands = capabilities.get("commands")
+    if not isinstance(commands, (list, tuple, set)) or "play_voice_clip" not in commands:
+        raise HomeAssistantError(
+            f"{runtime.device_name} does not support voice clips. "
+            "Update the SceneTV launcher to a version with voice clips."
+        )
+
+
+def _voice_clip_error(err: HomeAssistantError) -> HomeAssistantError:
+    """Replace a launcher error code with a readable message."""
+    text = str(err)
+    for code, message in VOICE_CLIP_ERRORS.items():
+        if code in text:
+            return HomeAssistantError(f"Voice clip not played: {message} ({code})")
+    return err
+
+
 def _web_popup_payload(call: ServiceCall) -> dict[str, Any]:
     """Build a show_web_popup payload (exactly one of html or url)."""
     payload: dict[str, Any] = {}
@@ -633,14 +752,23 @@ def async_register_services(hass: HomeAssistant) -> None:
     async def async_handle_service(call: ServiceCall) -> ServiceResponse:
         runtimes = _runtimes_from_call(hass, call)
         command_type, payload = COMMAND_BUILDERS[call.service](call)
+        if call.service == SERVICE_PLAY_VOICE_CLIP:
+            for runtime in runtimes:
+                _require_voice_clip_support(runtime)
+            payload = await _async_voice_clip_payload(hass, call)
         timeout_ms = call.data.get(ATTR_TIMEOUT_MS)
         response: ServiceResponse = None
         if call.return_response and "popup_id" in payload:
             response = {"popup_id": payload["popup_id"]}
         if len(runtimes) == 1:
-            await runtimes[0].async_send_command(
-                command_type, payload, timeout_ms=timeout_ms
-            )
+            try:
+                await runtimes[0].async_send_command(
+                    command_type, payload, timeout_ms=timeout_ms
+                )
+            except HomeAssistantError as err:
+                if call.service == SERVICE_PLAY_VOICE_CLIP:
+                    raise _voice_clip_error(err) from err
+                raise
             return response
 
         results = await asyncio.gather(
@@ -653,6 +781,10 @@ def async_register_services(hass: HomeAssistant) -> None:
         failures: list[str] = []
         for runtime, result in zip(runtimes, results, strict=True):
             if isinstance(result, Exception):
+                if call.service == SERVICE_PLAY_VOICE_CLIP and isinstance(
+                    result, HomeAssistantError
+                ):
+                    result = _voice_clip_error(result)
                 failures.append(f"{runtime.device_name}: {result}")
             elif isinstance(result, BaseException):
                 raise result

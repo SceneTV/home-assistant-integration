@@ -115,6 +115,7 @@ TRIGGERS: dict[str, _TriggerSpec] = {
     "popup_shown": _TriggerSpec("popup_shown"),
     "popup_dismissed": _TriggerSpec("popup_dismissed"),
     "popup_action": _TriggerSpec("popup_action", CONF_ACTION_ID, _action_matcher),
+    "voice_clip_played": _TriggerSpec("voice_clip_finished"),
     "tile_pressed": _TriggerSpec(
         "action_tile_pressed", CONF_ACTION_ID, _action_matcher
     ),

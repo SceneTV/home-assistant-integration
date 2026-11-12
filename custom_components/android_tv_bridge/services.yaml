@@ -845,3 +845,65 @@ queue_pause:
           min: 1000
           max: 60000
           mode: box
+
+play_voice_clip:
+  target:
+    entity:
+      integration: android_tv_bridge
+  fields:
+    entry_id:
+      selector:
+        text:
+    media_id:
+      example: media-source://media_source/local/dinner.mp3
+      selector:
+        text:
+    url:
+      example: http://192.168.1.10:8123/local/dinner.mp3
+      selector:
+        text:
+          type: url
+    title:
+      example: Dinner is ready
+      selector:
+        text:
+    from:
+      example: Mum
+      selector:
+        text:
+    position:
+      selector:
+        select:
+          options:
+            - top-left
+            - top-right
+            - bottom-left
+            - bottom-right
+            - center
+    autoplay:
+      selector:
+        boolean:
+    profiles:
+      example: '["Tyler", "Kids"]'
+      selector:
+        object:
+    pause_media:
+      selector:
+        boolean:
+    actions:
+      example: >-
+        [{"id": "thumbs_up", "label": "On my way"}]
+      selector:
+        object:
+    popup_id:
+      selector:
+        text:
+    dismiss_label:
+      selector:
+        text:
+    timeout_ms:
+      selector:
+        number:
+          min: 1000
+          max: 60000
+          mode: box
