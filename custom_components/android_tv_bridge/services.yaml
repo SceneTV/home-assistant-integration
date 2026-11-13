@@ -562,6 +562,73 @@ show_image:
           max: 60000
           mode: box
 
+show_camera:
+  name: Show camera popup
+  description: Show a snapshot popup from a camera configured on SceneTV. Requires a launcher that advertises show_camera.
+  target:
+    entity:
+      integration: android_tv_bridge
+  fields:
+    entry_id:
+      selector:
+        text:
+    camera:
+      required: true
+      description: Camera id configured in SceneTV camera settings. Stream URLs and credentials stay on the TV.
+      example: front_door
+      selector:
+        text:
+    title:
+      description: Optional popup title. Defaults to the camera name on the TV.
+      example: Someone is at the door
+      selector:
+        text:
+    position:
+      default: top-right
+      selector:
+        select:
+          options:
+            - top-left
+            - top-right
+            - bottom-left
+            - bottom-right
+            - center
+    size:
+      default: medium
+      selector:
+        select:
+          options:
+            - small
+            - medium
+            - large
+    duration_ms:
+      default: 15000
+      selector:
+        number:
+          min: 1000
+          max: 600000
+          mode: box
+    interrupt:
+      description: Take remote focus so OK or Back dismisses the popup.
+      selector:
+        boolean:
+    profiles:
+      description: SceneTV profile ids or names that may see this popup. Overrides the camera's popup profiles on the TV.
+      example: '["Living room", "Adults"]'
+      selector:
+        text:
+          multiple: true
+    pause_media:
+      description: Override whether SceneTV pauses playing media while the popup is shown.
+      selector:
+        boolean:
+    timeout_ms:
+      selector:
+        number:
+          min: 1000
+          max: 60000
+          mode: box
+
 dismiss_popup:
   target:
     entity:
