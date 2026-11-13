@@ -487,6 +487,9 @@ The integration fires these Home Assistant events:
 | `android_tv_bridge.queue_item_started`, `queue_item_finished`, `queue_item_failed` | A queue item changed state (`item_id`) |
 | `android_tv_bridge.queue_paused` | The queue paused (`reason`, for example `user_input` or `foreground_changed`) |
 | `android_tv_bridge.queue_finished` | The last queue item finished |
+| `android_tv_bridge.screen_changed` | The screen turned on or off, or the screensaver started (`screen`, `previous_screen`, `timestamp`) |
+| `android_tv_bridge.tv_input_state_changed` | A passthrough (HDMI) input changed state (`id`, `label`, `state`, `previous_state`, `timestamp`) |
+| `android_tv_bridge.audio_playing_changed` | Audio from any app started or stopped (`audio_playing`, `timestamp`) |
 | `android_tv_bridge.event` | Any other launcher event; the launcher's event name is in `event_type` |
 
 `remote_key_pressed`, `launcher_focused`, `launcher_item_selected` and
@@ -512,6 +515,29 @@ actions:
       area_id: living_room
 ```
 
+## TV sensors
+
+Launchers that list them in `capabilities.sensors` get these extra entities;
+older launchers simply don't get them.
+
+| Entity | Shows |
+| --- | --- |
+| Screen | `on`, `screensaver` or `off` |
+| Screen on | On for `on` and `screensaver` |
+| TV input | Label of the active HDMI input, only known when SceneTV opened it (attributes `id`, `confidence`) |
+| *Input* device (diagnostic, one per HDMI input) | On while the input reports a connected device, off in standby or when disconnected (attribute `state`) |
+| Audio playing | Any app is playing audio, including games with no media session |
+| Audio output (diagnostic) | `hdmi_arc`, `hdmi`, `bluetooth`, `speaker`, `usb` or `unknown` |
+| Foreground app category | The foreground app's Android category, such as `game` or `video` (often `unknown`) |
+| Gaming | The foreground app's category is `game` (a console on HDMI does not count) |
+
+Every launcher also gets **Network type**, **Internet access** and
+**Wireless signal level** (disabled by default) as diagnostic entities.
+
+When the TV drops the connection while its screen is off (standby), **Screen**
+and **Screen on** stay available and report off, and **Idle** reports on. All
+other entities go unavailable as usual.
+
 ## Device triggers
 
 Each SceneTV TV offers device triggers, so automations can be built from the
@@ -530,6 +556,8 @@ under **When** > **Device**.
 | Web card or popup sent an action | `web_action` | `action_id` (matches `action`) |
 | Started the next queue item / finished the queue | `queue_item_started`, `queue_finished` | |
 | Became idle / became active | `idle_changed` | |
+| Screen turned on / screen turned off / screensaver started | `screen_changed` | |
+| A device on a TV input woke up | `tv_input_state_changed` (state becomes `connected`) | `input`, an input name or id |
 
 ```yaml
 triggers:

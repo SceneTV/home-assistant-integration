@@ -153,6 +153,16 @@ def _clean_state(data: Mapping[str, Any] | None) -> dict[str, Any]:
         else media_state == "playing",
         "idle": data.get("idle"),
         "network_connected": network.get("connected"),
+        "network_type": _first_present(data.get("network_type"), network.get("type")),
+        "wireless_signal_level": _first_present(
+            data.get("wireless_signal_level"),
+            network.get("wireless_signal_level"),
+            network.get("signal_level"),
+        ),
+        "has_internet_access": _first_present(
+            data.get("has_internet_access"),
+            network.get("has_internet_access"),
+        ),
         "launcher_mode": data.get("launcher_mode") or data.get("launcherMode"),
         "launcher_modes": data.get("launcher_modes") or data.get("launcherModes"),
         "active_profile": data.get("active_profile") or data.get("activeProfile"),
@@ -161,6 +171,37 @@ def _clean_state(data: Mapping[str, Any] | None) -> dict[str, Any]:
         "profile_options": data.get("profile_options") or data.get("profileOptions"),
         "profiles": data.get("profiles"),
     }
+
+
+def _state_from_event(
+    event_type: str,
+    payload: Mapping[str, Any],
+    current: Mapping[str, Any],
+) -> dict[str, Any]:
+    """Return the state fields a launcher event carries ahead of its state push.
+
+    The launcher sends ``screen_changed`` before Wi-Fi can drop on standby, so
+    the new screen value must land in state even if the state push never comes.
+    """
+    if event_type == "screen_changed" and payload.get("screen") is not None:
+        return {
+            "screen": payload["screen"],
+            "screen_changed_at": payload.get("timestamp"),
+        }
+    if event_type == "audio_playing_changed" and "audio_playing" in payload:
+        return {"audio_playing": payload["audio_playing"]}
+    if event_type == "tv_input_state_changed" and payload.get("id") is not None:
+        inputs = current.get("tv_inputs")
+        if not isinstance(inputs, list):
+            return {}
+        updated = [
+            {**item, "state": payload.get("state")}
+            if isinstance(item, Mapping) and item.get("id") == payload["id"]
+            else item
+            for item in inputs
+        ]
+        return {"tv_inputs": updated}
+    return {}
 
 
 class AndroidTVBridgeRuntime:
@@ -209,6 +250,30 @@ class AndroidTVBridgeRuntime:
             if isinstance(caps, Mapping):
                 merged.update(caps)
         return merged
+
+    @property
+    def supported_sensors(self) -> set[str]:
+        """Return the extra state fields the launcher advertises.
+
+        Comes from ``capabilities.sensors``; old launchers send nothing, so
+        entities for those fields are not created.
+        """
+        sensors = self.capabilities.get("sensors")
+        if not isinstance(sensors, list):
+            return set()
+        return {str(sensor) for sensor in sensors}
+
+    @property
+    def screen_off_while_disconnected(self) -> bool:
+        """Return True when the WebSocket is down and the screen was last off.
+
+        A TV in standby may drop the bridge connection right after turning the
+        screen off. The screen and idle entities keep their state then instead
+        of going unavailable (decision D4 in the extra TV sensors plan).
+        """
+        if self.connected:
+            return False
+        return (self.coordinator.data or {}).get("screen") == "off"
 
     @property
     def device_name(self) -> str:
@@ -383,6 +448,11 @@ class AndroidTVBridgeRuntime:
 
         if message_type in {"event", "transient_event"}:
             event_type = str(body.get("type") or payload.get("event_type") or "")
+            state_update = _state_from_event(
+                event_type, body, self.coordinator.data or {}
+            )
+            if state_update:
+                self._merge_state(state_update)
             self._fire_event(event_type, dict(body))
             if event_type in ACTION_EVENT_TYPES:
                 self.hass.async_create_task(
