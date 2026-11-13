@@ -441,7 +441,7 @@
         },
         "actions": {
           "name": "Buttons",
-          "description": "Up to 3 buttons, each {id, label, style, default, data}, same as Show popup. A press fires android_tv_bridge.popup_action."
+          "description": "Up to 3 buttons, each with id, label, style, default and data, same as Show popup. A press fires android_tv_bridge.popup_action."
         },
         "popup_id": {
           "name": "Popup ID",
