@@ -59,6 +59,14 @@ INPUTS: dict[str, dict[str, Any]] = {
         "home_button": "button.living_room_tv_home",
         "kids_profile": "Kids",
     },
+    "kids_bedtime_lock.yaml": {
+        "tv": DEVICE,
+        "kids_profile": "Kids",
+    },
+    "screen_time_up_notify.yaml": {
+        "tv": DEVICE,
+        "notify_action": "notify.mobile_app_phone",
+    },
     "lights_off_when_idle.yaml": {
         "tv": DEVICE,
         "playing_sensor": "binary_sensor.living_room_tv_playing",
@@ -244,3 +252,128 @@ async def test_announce_on_tv_sends_tts_voice_clip(
     )
     assert calls[0].data["pause_media"] is True
     assert calls[0].data["device_id"] == [device.id]
+
+
+async def test_screen_time_up_notify_sends_notification(
+    hass: HomeAssistant, request: pytest.FixtureRequest
+) -> None:
+    """End to end: screen_time_limit_reached calls the chosen notify action."""
+    filename = "screen_time_up_notify.yaml"
+    target = Path(hass.config.path("blueprints", "automation", DOMAIN))
+    target.mkdir(parents=True, exist_ok=True)
+    shutil.copy(BLUEPRINT_DIR / filename, target / filename)
+    request.addfinalizer(lambda: shutil.rmtree(target, ignore_errors=True))
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="launcher-1",
+        data={CONF_HOST: "192.168.1.50", CONF_PORT: 8765, "token": "t"},
+    )
+    entry.add_to_hass(hass)
+    device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id, identifiers={(DOMAIN, "launcher-1")}
+    )
+    notify = async_mock_service(hass, "notify", "mobile_app_phone")
+
+    assert await async_setup_component(
+        hass,
+        automation.DOMAIN,
+        {
+            automation.DOMAIN: {
+                "id": "under_test",
+                "use_blueprint": {
+                    "path": f"{DOMAIN}/{filename}",
+                    "input": {
+                        "tv": device.id,
+                        "profile": "Kids",
+                        "notify_action": "notify.mobile_app_phone",
+                    },
+                },
+            }
+        },
+    )
+    await hass.async_block_till_done()
+
+    def fire(event: str, **data: Any) -> None:
+        hass.bus.async_fire(
+            f"{DOMAIN}.{event}",
+            {"device_id": "launcher-1", "profile_id": 2, "profile": "Kids", **data},
+        )
+
+    fire("screen_time_warning", remaining_min=5)  # warnings are off by default
+    fire("screen_time_limit_reached", reason="bedtime", profile="Other")
+    await hass.async_block_till_done()
+    assert notify == []
+
+    fire("screen_time_limit_reached", reason="budget_exhausted")
+    await hass.async_block_till_done()
+    assert len(notify) == 1
+    assert notify[0].data["title"] == "Screen time is up"
+    assert notify[0].data["message"].startswith("Kids has used today's screen time")
+
+
+async def test_kids_bedtime_lock_locks_and_unlocks(
+    hass: HomeAssistant, request: pytest.FixtureRequest
+) -> None:
+    """The lock and unlock times call lock_profile and unlock_profile."""
+    from datetime import datetime, timedelta
+
+    from homeassistant.util import dt as dt_util
+    from pytest_homeassistant_custom_component.common import async_fire_time_changed
+
+    filename = "kids_bedtime_lock.yaml"
+    target = Path(hass.config.path("blueprints", "automation", DOMAIN))
+    target.mkdir(parents=True, exist_ok=True)
+    shutil.copy(BLUEPRINT_DIR / filename, target / filename)
+    request.addfinalizer(lambda: shutil.rmtree(target, ignore_errors=True))
+
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="launcher-1",
+        data={CONF_HOST: "192.168.1.50", CONF_PORT: 8765, "token": "t"},
+    )
+    entry.add_to_hass(hass)
+    device = dr.async_get(hass).async_get_or_create(
+        config_entry_id=entry.entry_id, identifiers={(DOMAIN, "launcher-1")}
+    )
+    lock = async_mock_service(hass, DOMAIN, "lock_profile")
+    unlock = async_mock_service(hass, DOMAIN, "unlock_profile")
+    popup = async_mock_service(hass, DOMAIN, "show_popup")
+
+    assert await async_setup_component(
+        hass,
+        automation.DOMAIN,
+        {
+            automation.DOMAIN: {
+                "id": "under_test",
+                "use_blueprint": {
+                    "path": f"{DOMAIN}/{filename}",
+                    "input": {
+                        "tv": device.id,
+                        "kids_profile": "Kids",
+                        "lock_time": "20:00:00",
+                        "unlock_time": "07:00:00",
+                    },
+                },
+            }
+        },
+    )
+    await hass.async_block_till_done()
+
+    today = dt_util.now().date()
+    tz = dt_util.get_default_time_zone()
+    async_fire_time_changed(
+        hass, datetime(today.year, today.month, today.day, 20, 0, 0, tzinfo=tz)
+    )
+    await hass.async_block_till_done()
+    assert len(lock) == 1
+    assert lock[0].data["profile"] == "Kids"
+    assert lock[0].data["device_id"] == [device.id]
+    assert len(popup) == 1
+
+    tomorrow = today + timedelta(days=1)
+    async_fire_time_changed(
+        hass, datetime(tomorrow.year, tomorrow.month, tomorrow.day, 7, 0, 0, tzinfo=tz)
+    )
+    await hass.async_block_till_done()
+    assert len(unlock) == 1

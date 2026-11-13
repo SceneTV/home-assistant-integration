@@ -1,0 +1,85 @@
+blueprint:
+  name: SceneTV bedtime lock (kids profile)
+  description: >-
+    At bedtime, switch the TV to the kids profile and lock it there; unlock it
+    in the morning. While locked, the TV's parent PIN cannot leave the profile,
+    only Home Assistant can. The launcher's own limits for that profile
+    (restricted apps, daily budget, bedtime window) apply as usual.
+    Needs a SceneTV launcher with kids profile and screen time support
+    (launcher issue #34). These are guardrails, not a security lock.
+  domain: automation
+  source_url: https://github.com/SceneTV/home-assistant-integration/blob/main/blueprints/automation/android_tv_bridge/kids_bedtime_lock.yaml
+  input:
+    tv:
+      name: TV
+      selector:
+        device:
+          integration: android_tv_bridge
+    kids_profile:
+      name: Kids profile
+      description: Profile name exactly as it appears on the TV.
+      selector:
+        text:
+    lock_time:
+      name: Lock at
+      default: "20:00:00"
+      selector:
+        time:
+    unlock_time:
+      name: Unlock at
+      default: "07:00:00"
+      selector:
+        time:
+    message:
+      name: Message on the TV when it locks (optional)
+      description: Leave empty for no popup.
+      default: It's bedtime. The TV is done for tonight.
+      selector:
+        text:
+
+mode: queued
+max: 5
+
+variables:
+  kids_profile: !input kids_profile
+  message: !input message
+
+triggers:
+  - trigger: time
+    at: !input lock_time
+    id: lock
+  - trigger: time
+    at: !input unlock_time
+    id: unlock
+
+actions:
+  - choose:
+      - conditions:
+          - condition: trigger
+            id: lock
+        sequence:
+          - action: android_tv_bridge.lock_profile
+            target:
+              device_id: !input tv
+            data:
+              profile: "{{ kids_profile }}"
+          - if:
+              - condition: template
+                value_template: "{{ message | length > 0 }}"
+            then:
+              - action: android_tv_bridge.show_popup
+                target:
+                  device_id: !input tv
+                data:
+                  title: Bedtime
+                  text: "{{ message }}"
+                  position: center
+                  duration_ms: 15000
+                continue_on_error: true
+      - conditions:
+          - condition: trigger
+            id: unlock
+        sequence:
+          - action: android_tv_bridge.unlock_profile
+            target:
+              device_id: !input tv

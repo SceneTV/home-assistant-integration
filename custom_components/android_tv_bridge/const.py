@@ -20,8 +20,11 @@ PLATFORMS: list[Platform] = [
     Platform.BUTTON,
     Platform.MEDIA_PLAYER,
     Platform.NOTIFY,
+    Platform.NUMBER,
     Platform.SELECT,
     Platform.SENSOR,
+    Platform.SWITCH,
+    Platform.TIME,
 ]
 
 EVENT_COMMAND_RESULT = f"{DOMAIN}.command_result"
@@ -59,6 +62,13 @@ EVENT_MAP = {
     "queue_paused": f"{DOMAIN}.queue_paused",
     "queue_finished": f"{DOMAIN}.queue_finished",
     "action_tile_pressed": f"{DOMAIN}.action_tile_pressed",
+    # Kids profile and screen time (launcher issue #34).
+    "launch_blocked": f"{DOMAIN}.launch_blocked",
+    "parental_enforcement_changed": f"{DOMAIN}.parental_enforcement_changed",
+    "screen_time_warning": f"{DOMAIN}.screen_time_warning",
+    "screen_time_limit_reached": f"{DOMAIN}.screen_time_limit_reached",
+    "profile_locked": f"{DOMAIN}.profile_locked",
+    "profile_unlocked": f"{DOMAIN}.profile_unlocked",
 }
 """Launcher event types with a dedicated Home Assistant event name.
 

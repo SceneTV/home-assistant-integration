@@ -135,6 +135,37 @@ SERVICE_QUEUE_CLEAR = "queue_clear"
 SERVICE_QUEUE_PLAY = "queue_play"
 SERVICE_QUEUE_NEXT = "queue_next"
 SERVICE_QUEUE_PAUSE = "queue_pause"
+SERVICE_SET_PROFILE_POLICY = "set_profile_policy"
+SERVICE_GRANT_EXTRA_TIME = "grant_extra_time"
+SERVICE_LOCK_PROFILE = "lock_profile"
+SERVICE_UNLOCK_PROFILE = "unlock_profile"
+SERVICE_SET_PROFILE_RESTRICTED = "set_profile_restricted"
+SERVICE_SET_PROFILE_ALLOWED_APPS = "set_profile_allowed_apps"
+
+# Kids profile and screen time services (launcher issue #34).
+PROFILE_SERVICES = frozenset(
+    {
+        SERVICE_SET_PROFILE_POLICY,
+        SERVICE_GRANT_EXTRA_TIME,
+        SERVICE_LOCK_PROFILE,
+        SERVICE_UNLOCK_PROFILE,
+        SERVICE_SET_PROFILE_RESTRICTED,
+        SERVICE_SET_PROFILE_ALLOWED_APPS,
+    }
+)
+PROFILE_POLICY_KEYS = ("daily_budget_min", "bedtime_start", "bedtime_end")
+ALLOWED_APPS_MODES = ("replace", "add", "remove")
+MAX_DAILY_BUDGET_MIN = 1440
+MAX_EXTRA_TIME_MIN = 720
+PROFILE_ERRORS = {
+    "unsupported_command": (
+        "this SceneTV launcher does not support kids profiles and screen time "
+        "yet; update the launcher"
+    ),
+    "invalid_profile": "no SceneTV profile matches {profile}",
+    "profile_locked": "the TV is locked to a profile; unlock it first",
+    "launch_blocked": "the profile's policy blocked the launch",
+}
 
 # entry_id plus the standard HA target fields (device_id, area_id, entity_id,
 # floor_id, label_id). A plain string device_id is still accepted.
@@ -289,6 +320,34 @@ def _key_event(value: Any) -> str:
     if key not in SUPPORTED_KEY_EVENTS:
         raise vol.Invalid("unsupported key event")
     return key
+
+
+def _hhmm(value: Any) -> str:
+    """Validate a local time and return it as "HH:MM" (seconds dropped)."""
+    return cv.time(value).strftime("%H:%M")
+
+
+def _package_list(value: Any) -> list[str]:
+    """Validate a list of Android package names (empty entries dropped)."""
+    packages = [cv.string(item).strip() for item in cv.ensure_list(value)]
+    return [package for package in packages if package]
+
+
+# Profile is chosen by name (``profile``) or id (``profile_id``), like
+# select_profile on the launcher.
+_PROFILE_FIELDS = {
+    vol.Optional("profile"): vol.All(cv.string, vol.Strip, vol.Length(min=1)),
+    vol.Optional("profile_id"): cv.positive_int,
+    vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int,
+}
+
+
+def _profile_schema(fields: Mapping[Any, Any] | None = None) -> vol.All:
+    return vol.All(
+        _schema({**_PROFILE_FIELDS, **(fields or {})}),
+        cv.has_at_least_one_key("profile", "profile_id"),
+        cv.has_at_most_one_key("profile", "profile_id"),
+    )
 
 
 def _media_command(value: Any) -> str:
@@ -490,6 +549,43 @@ SERVICE_SCHEMAS = {
     ),
     SERVICE_QUEUE_NEXT: _schema({vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int}),
     SERVICE_QUEUE_PAUSE: _schema({vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int}),
+    SERVICE_SET_PROFILE_POLICY: vol.All(
+        _profile_schema(
+            {
+                vol.Optional("daily_budget_min"): vol.Any(
+                    None,
+                    vol.All(
+                        vol.Coerce(int), vol.Range(min=0, max=MAX_DAILY_BUDGET_MIN)
+                    ),
+                ),
+                vol.Optional("bedtime_start"): vol.Any(None, _hhmm),
+                vol.Optional("bedtime_end"): vol.Any(None, _hhmm),
+                vol.Optional("clear_daily_budget"): cv.boolean,
+                vol.Optional("clear_bedtime"): cv.boolean,
+            }
+        ),
+        cv.has_at_least_one_key(
+            *PROFILE_POLICY_KEYS, "clear_daily_budget", "clear_bedtime"
+        ),
+    ),
+    SERVICE_GRANT_EXTRA_TIME: _profile_schema(
+        {
+            vol.Required("minutes"): vol.All(
+                vol.Coerce(int), vol.Range(min=1, max=MAX_EXTRA_TIME_MIN)
+            ),
+        }
+    ),
+    SERVICE_LOCK_PROFILE: _profile_schema(),
+    SERVICE_UNLOCK_PROFILE: _schema({vol.Optional(ATTR_TIMEOUT_MS): cv.positive_int}),
+    SERVICE_SET_PROFILE_RESTRICTED: _profile_schema(
+        {vol.Required("restricted"): cv.boolean}
+    ),
+    SERVICE_SET_PROFILE_ALLOWED_APPS: _profile_schema(
+        {
+            vol.Required("packages"): _package_list,
+            vol.Optional("mode", default="replace"): vol.In(ALLOWED_APPS_MODES),
+        }
+    ),
 }
 
 
@@ -568,7 +664,62 @@ COMMAND_BUILDERS: dict[str, Callable[[ServiceCall], tuple[str, dict[str, Any]]]]
     ),
     SERVICE_QUEUE_NEXT: lambda call: ("queue_next", {}),
     SERVICE_QUEUE_PAUSE: lambda call: ("queue_pause", {}),
+    SERVICE_SET_PROFILE_POLICY: lambda call: (
+        "set_profile_policy",
+        _profile_policy_payload(call),
+    ),
+    SERVICE_GRANT_EXTRA_TIME: lambda call: (
+        "grant_extra_time",
+        {**_profile_target(call), "minutes": call.data["minutes"]},
+    ),
+    SERVICE_LOCK_PROFILE: lambda call: ("lock_profile", _profile_target(call)),
+    SERVICE_UNLOCK_PROFILE: lambda call: ("unlock_profile", {}),
+    SERVICE_SET_PROFILE_RESTRICTED: lambda call: (
+        "set_profile_restricted",
+        {**_profile_target(call), "restricted": call.data["restricted"]},
+    ),
+    SERVICE_SET_PROFILE_ALLOWED_APPS: lambda call: (
+        "set_profile_allowed_apps",
+        {
+            **_profile_target(call),
+            "packages": list(call.data["packages"]),
+            "mode": call.data["mode"],
+        },
+    ),
 }
+
+
+def _profile_target(call: ServiceCall) -> dict[str, Any]:
+    """Return the launcher's profile selector: profile_id wins over a name."""
+    if "profile_id" in call.data:
+        return {"profile_id": call.data["profile_id"]}
+    return {"profile": call.data["profile"]}
+
+
+def _profile_policy_payload(call: ServiceCall) -> dict[str, Any]:
+    """Build set_profile_policy: omitted keys stay unchanged, null clears."""
+    payload = _profile_target(call)
+    for key in PROFILE_POLICY_KEYS:
+        if key in call.data:
+            payload[key] = call.data[key]
+    if call.data.get("clear_daily_budget"):
+        payload["daily_budget_min"] = None
+    if call.data.get("clear_bedtime"):
+        payload["bedtime_start"] = None
+        payload["bedtime_end"] = None
+    return payload
+
+
+def _profile_error(err: HomeAssistantError, call: ServiceCall) -> HomeAssistantError:
+    """Replace a launcher error code from a profile command with a readable message."""
+    text = str(err)
+    profile = call.data.get("profile", call.data.get("profile_id"))
+    for code, message in PROFILE_ERRORS.items():
+        if code in text:
+            return HomeAssistantError(
+                f"{call.service} failed: {message.format(profile=profile)} ({code})"
+            )
+    return err
 
 
 def _launch_activity_payload(call: ServiceCall) -> dict[str, Any]:
@@ -900,6 +1051,8 @@ def async_register_services(hass: HomeAssistant) -> None:
             except HomeAssistantError as err:
                 if call.service == SERVICE_PLAY_VOICE_CLIP:
                     raise _voice_clip_error(err) from err
+                if call.service in PROFILE_SERVICES:
+                    raise _profile_error(err, call) from err
                 raise
             return response
 
@@ -917,6 +1070,10 @@ def async_register_services(hass: HomeAssistant) -> None:
                     result, HomeAssistantError
                 ):
                     result = _voice_clip_error(result)
+                elif call.service in PROFILE_SERVICES and isinstance(
+                    result, HomeAssistantError
+                ):
+                    result = _profile_error(result, call)
                 failures.append(f"{runtime.device_name}: {result}")
             elif isinstance(result, BaseException):
                 raise result
