@@ -31,11 +31,20 @@ from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.trigger import TriggerActionType, TriggerInfo
 from homeassistant.helpers.typing import ConfigType
 
-from .const import ATTR_EVENT_TYPE, DOMAIN, EVENT_GENERIC
+from .const import (
+    ATTR_EVENT_TYPE,
+    DOMAIN,
+    EVENT_GENERIC,
+    SCREEN_OFF,
+    SCREEN_ON,
+    SCREEN_SCREENSAVER,
+    TV_INPUT_CONNECTED,
+)
 
 CONF_PACKAGE = "package"
 CONF_PROFILE = "profile"
 CONF_ACTION_ID = "action_id"
+CONF_INPUT = "input"
 
 
 def _nested(data: Mapping[str, Any], *path: str) -> Any:
@@ -91,6 +100,25 @@ def _package_matcher(
     getter: Callable[[Mapping[str, Any]], Any],
 ) -> Callable[[Mapping[str, Any], str], bool]:
     return lambda data, wanted: getter(data) == wanted
+
+
+def _input_matcher(data: Mapping[str, Any], wanted: str) -> bool:
+    """Match a TV input by label (case-insensitive) or id."""
+    wanted_folded = wanted.casefold()
+    return any(
+        candidate is not None and str(candidate).casefold() == wanted_folded
+        for candidate in (data.get("label"), data.get("id"))
+    )
+
+
+def _screen_is(value: str) -> Callable[[Mapping[str, Any]], bool]:
+    return lambda data: data.get("screen") == value
+
+
+def _input_woke(data: Mapping[str, Any]) -> bool:
+    return data.get("state") == TV_INPUT_CONNECTED and (
+        data.get("previous_state") != TV_INPUT_CONNECTED
+    )
 
 
 def _action_matcher(data: Mapping[str, Any], wanted: str) -> bool:
@@ -151,6 +179,21 @@ TRIGGERS: dict[str, _TriggerSpec] = {
         "parental_enforcement_changed",
         payload_check=lambda data: data.get("active") is True,
     ),
+    "screen_turned_on": _TriggerSpec(
+        "screen_changed", payload_check=_screen_is(SCREEN_ON)
+    ),
+    "screen_turned_off": _TriggerSpec(
+        "screen_changed", payload_check=_screen_is(SCREEN_OFF)
+    ),
+    "screensaver_started": _TriggerSpec(
+        "screen_changed", payload_check=_screen_is(SCREEN_SCREENSAVER)
+    ),
+    "tv_input_device_woke": _TriggerSpec(
+        "tv_input_state_changed",
+        CONF_INPUT,
+        _input_matcher,
+        payload_check=_input_woke,
+    ),
 }
 
 TRIGGER_SCHEMA = DEVICE_TRIGGER_BASE_SCHEMA.extend(
@@ -159,6 +202,7 @@ TRIGGER_SCHEMA = DEVICE_TRIGGER_BASE_SCHEMA.extend(
         vol.Optional(CONF_PACKAGE): cv.string,
         vol.Optional(CONF_PROFILE): cv.string,
         vol.Optional(CONF_ACTION_ID): cv.string,
+        vol.Optional(CONF_INPUT): cv.string,
     }
 )
 
@@ -179,7 +223,7 @@ async def async_validate_trigger_config(
     """Validate a trigger config."""
     config = TRIGGER_SCHEMA(config)
     spec = TRIGGERS[config[CONF_TYPE]]
-    for field in (CONF_PACKAGE, CONF_PROFILE, CONF_ACTION_ID):
+    for field in (CONF_PACKAGE, CONF_PROFILE, CONF_ACTION_ID, CONF_INPUT):
         if field in config and field != spec.extra_field:
             raise InvalidDeviceAutomationConfig(
                 f"Trigger type {config[CONF_TYPE]} does not take {field}"

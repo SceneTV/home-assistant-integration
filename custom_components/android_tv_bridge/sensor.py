@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from typing import Any
 
@@ -14,10 +14,10 @@ from homeassistant.components.sensor import (
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory, UnitOfTime
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from .const import DOMAIN
+from .const import DOMAIN, SCREEN_STATES
 from .entity import AndroidTVBridgeEntity
 from .parental import (
     AndroidTVBridgeProfileEntity,
@@ -32,6 +32,17 @@ class AndroidTVBridgeSensorDescription(SensorEntityDescription):
     """Describes an Android TV Bridge sensor."""
 
     value_key: str
+    # Launcher field that must be listed in capabilities.sensors, if any.
+    required_sensor: str | None = None
+    # Stay available with the last state when the TV disconnects in standby.
+    keep_when_screen_off: bool = False
+    value_fn: Callable[[Mapping[str, Any]], Any] | None = None
+    attributes_fn: Callable[[Mapping[str, Any]], dict[str, Any]] | None = None
+
+
+def _screen_value(data: Mapping[str, Any]) -> str | None:
+    screen = data.get("screen")
+    return screen if screen in SCREEN_STATES else None
 
 
 SENSORS: tuple[AndroidTVBridgeSensorDescription, ...] = (
@@ -102,6 +113,53 @@ SENSORS: tuple[AndroidTVBridgeSensorDescription, ...] = (
         value_key="app_list_version",
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
+    AndroidTVBridgeSensorDescription(
+        key="screen",
+        translation_key="screen",
+        value_key="screen",
+        required_sensor="screen",
+        keep_when_screen_off=True,
+        device_class=SensorDeviceClass.ENUM,
+        options=SCREEN_STATES,
+        value_fn=_screen_value,
+        attributes_fn=lambda data: {"changed_at": data.get("screen_changed_at")},
+    ),
+    AndroidTVBridgeSensorDescription(
+        key="tv_input",
+        translation_key="tv_input",
+        value_key="tv_input",
+        required_sensor="tv_input",
+        attributes_fn=lambda data: {
+            "id": data.get("tv_input_id"),
+            "confidence": data.get("tv_input_confidence"),
+        },
+    ),
+    AndroidTVBridgeSensorDescription(
+        key="audio_output",
+        translation_key="audio_output",
+        value_key="audio_output",
+        required_sensor="audio_output",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    AndroidTVBridgeSensorDescription(
+        key="foreground_app_category",
+        translation_key="foreground_app_category",
+        value_key="foreground_app_category",
+        required_sensor="foreground_app_category",
+    ),
+    AndroidTVBridgeSensorDescription(
+        key="network_type",
+        translation_key="network_type",
+        value_key="network_type",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    AndroidTVBridgeSensorDescription(
+        key="wireless_signal_level",
+        translation_key="wireless_signal_level",
+        value_key="wireless_signal_level",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
+    ),
 )
 
 
@@ -150,9 +208,31 @@ async def async_setup_entry(
 ) -> None:
     """Set up Android TV Bridge sensors."""
     runtime: AndroidTVBridgeRuntime = hass.data[DOMAIN][entry.entry_id]
-    async_add_entities(
-        AndroidTVBridgeSensor(runtime, description) for description in SENSORS
-    )
+    added: set[str] = set()
+
+    @callback
+    def _async_add_new() -> None:
+        # Sensors for optional launcher fields appear once capabilities.sensors
+        # lists them, including after a launcher update without a reload.
+        supported = runtime.supported_sensors
+        new = [
+            description
+            for description in SENSORS
+            if description.key not in added
+            and (
+                description.required_sensor is None
+                or description.required_sensor in supported
+            )
+        ]
+        if not new:
+            return
+        added.update(description.key for description in new)
+        async_add_entities(
+            AndroidTVBridgeSensor(runtime, description) for description in new
+        )
+
+    _async_add_new()
+    entry.async_on_unload(runtime.coordinator.async_add_listener(_async_add_new))
     async_setup_profile_entities(
         runtime, entry, async_add_entities, PROFILE_SENSORS, AndroidTVBridgeProfileSensor
     )
@@ -166,7 +246,17 @@ class AndroidTVBridgeSensor(AndroidTVBridgeEntity, SensorEntity):
     @property
     def native_value(self) -> Any:
         """Return the current state value."""
-        return (self.coordinator.data or {}).get(self.entity_description.value_key)
+        data = self.coordinator.data or {}
+        if self.entity_description.value_fn is not None:
+            return self.entity_description.value_fn(data)
+        return data.get(self.entity_description.value_key)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any] | None:
+        """Return extra attributes for sensors that describe them."""
+        if self.entity_description.attributes_fn is None:
+            return None
+        return self.entity_description.attributes_fn(self.coordinator.data or {})
 
 
 class AndroidTVBridgeProfileSensor(AndroidTVBridgeProfileEntity, SensorEntity):

@@ -35,6 +35,13 @@ ATTR_EVENT_TYPE = "event_type"
 
 CONFIGURATION_PATH = "/configure"
 
+SCREEN_ON = "on"
+SCREEN_SCREENSAVER = "screensaver"
+SCREEN_OFF = "off"
+SCREEN_STATES = [SCREEN_ON, SCREEN_SCREENSAVER, SCREEN_OFF]
+
+TV_INPUT_CONNECTED = "connected"
+
 CONF_EXPOSED_ACTIONS = "exposed_actions"
 EXPOSED_ACTION_DOMAINS = ("script", "scene")
 
@@ -48,6 +55,9 @@ EVENT_MAP = {
     "launcher_focused": f"{DOMAIN}.launcher_focused",
     "launcher_item_selected": f"{DOMAIN}.launcher_item_selected",
     "idle_changed": f"{DOMAIN}.idle_changed",
+    "screen_changed": f"{DOMAIN}.screen_changed",
+    "tv_input_state_changed": f"{DOMAIN}.tv_input_state_changed",
+    "audio_playing_changed": f"{DOMAIN}.audio_playing_changed",
     "command_result": EVENT_COMMAND_RESULT,
     "popup_shown": f"{DOMAIN}.popup_shown",
     "popup_dismissed": f"{DOMAIN}.popup_dismissed",
