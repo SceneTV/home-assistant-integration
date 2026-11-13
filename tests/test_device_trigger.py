@@ -59,6 +59,14 @@ def calls(hass: HomeAssistant) -> list[ServiceCall]:
 async def _automation(
     hass: HomeAssistant, device_id: str, trigger_type: str, **extra: Any
 ) -> None:
+    await _automations(hass, device_id, [(trigger_type, extra)])
+
+
+async def _automations(
+    hass: HomeAssistant,
+    device_id: str,
+    triggers: list[tuple[str, dict[str, Any]]],
+) -> None:
     assert await async_setup_component(
         hass,
         automation.DOMAIN,
@@ -82,6 +90,7 @@ async def _automation(
                         },
                     },
                 }
+                for trigger_type, extra in triggers
             ]
         },
     )
@@ -249,3 +258,81 @@ async def test_voice_clip_played_fires_for_this_tv_only(
     await hass.async_block_till_done()
 
     assert len(calls) == 1
+
+
+async def test_screen_triggers_split_on_new_value(
+    hass: HomeAssistant, device: dr.DeviceEntry, calls: list[ServiceCall]
+) -> None:
+    await _automations(
+        hass,
+        device.id,
+        [("screen_turned_on", {}), ("screen_turned_off", {}), ("screensaver_started", {})],
+    )
+
+    _fire(hass, "screen_changed", {"screen": "screensaver", "previous_screen": "on"})
+    _fire(hass, "screen_changed", {"screen": "off", "previous_screen": "screensaver"})
+    _fire(hass, "screen_changed", {"screen": "on", "previous_screen": "off"})
+    _fire(
+        hass,
+        "screen_changed",
+        {"screen": "off", "previous_screen": "on"},
+        launcher_id=OTHER_LAUNCHER_ID,
+    )
+    await hass.async_block_till_done()
+
+    assert [call.data["type"] for call in calls] == [
+        "screensaver_started",
+        "screen_turned_off",
+        "screen_turned_on",
+    ]
+    assert calls[0].data["event"] == f"{DOMAIN}.screen_changed"
+
+
+async def test_tv_input_device_woke(
+    hass: HomeAssistant, device: dr.DeviceEntry, calls: list[ServiceCall]
+) -> None:
+    await _automations(
+        hass,
+        device.id,
+        [("tv_input_device_woke", {}), ("tv_input_device_woke", {"input": "playstation 5"})],
+    )
+
+    _fire(
+        hass,
+        "tv_input_state_changed",
+        {"id": "hdmi1", "label": "HDMI 1", "state": "connected", "previous_state": "standby"},
+    )
+    _fire(
+        hass,
+        "tv_input_state_changed",
+        {
+            "id": "hdmi2",
+            "label": "PlayStation 5",
+            "state": "connected",
+            "previous_state": "disconnected",
+        },
+    )
+    _fire(
+        hass,
+        "tv_input_state_changed",
+        {"id": "hdmi2", "label": "PlayStation 5", "state": "standby", "previous_state": "connected"},
+    )
+    await hass.async_block_till_done()
+
+    # Unfiltered trigger fires twice, the PlayStation one once.
+    assert len(calls) == 3
+    assert {call.data["type"] for call in calls} == {"tv_input_device_woke"}
+
+
+async def test_input_filter_only_on_input_trigger(
+    hass: HomeAssistant, device: dr.DeviceEntry
+) -> None:
+    base = {"platform": "device", "domain": DOMAIN, "device_id": device.id}
+    with pytest.raises(InvalidDeviceAutomationConfig):
+        await async_validate_trigger_config(
+            hass, {**base, "type": "screen_turned_on", "input": "hdmi1"}
+        )
+    caps = await async_get_trigger_capabilities(
+        hass, {"type": "tv_input_device_woke", "domain": DOMAIN, "device_id": "x"}
+    )
+    assert "input" in caps["extra_fields"].schema

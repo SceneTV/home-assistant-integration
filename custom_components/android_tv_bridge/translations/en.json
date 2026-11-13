@@ -84,7 +84,16 @@
       "media_position": { "name": "Media position" },
       "media_duration": { "name": "Media duration" },
       "last_key": { "name": "Last key" },
-      "app_list_version": { "name": "App list version" }
+      "app_list_version": { "name": "App list version" },
+      "screen": {
+        "name": "Screen",
+        "state": { "on": "On", "screensaver": "Screensaver", "off": "Off" }
+      },
+      "tv_input": { "name": "TV input" },
+      "audio_output": { "name": "Audio output" },
+      "foreground_app_category": { "name": "Foreground app category" },
+      "network_type": { "name": "Network type" },
+      "wireless_signal_level": { "name": "Wireless signal level" }
     },
     "binary_sensor": {
       "connection": { "name": "Connection" },
@@ -93,7 +102,12 @@
       "idle": { "name": "Idle" },
       "accessibility": { "name": "Accessibility" },
       "overlay_permission": { "name": "Overlay permission" },
-      "popups_enabled": { "name": "Home Assistant popups" }
+      "popups_enabled": { "name": "Home Assistant popups" },
+      "screen_on": { "name": "Screen on" },
+      "audio_playing": { "name": "Audio playing" },
+      "gaming": { "name": "Gaming" },
+      "internet_access": { "name": "Internet access" },
+      "tv_input_device": { "name": "{input} device" }
     },
     "button": {
       "refresh": { "name": "Refresh apps" },
@@ -459,12 +473,17 @@
       "queue_item_started": "{entity_name} started the next queue item",
       "queue_finished": "{entity_name} finished its play queue",
       "became_idle": "{entity_name} became idle",
-      "became_active": "{entity_name} became active"
+      "became_active": "{entity_name} became active",
+      "screen_turned_on": "{entity_name} screen turned on",
+      "screen_turned_off": "{entity_name} screen turned off",
+      "screensaver_started": "{entity_name} started the screensaver",
+      "tv_input_device_woke": "A device on a {entity_name} TV input woke up"
     },
     "extra_fields": {
       "package": "App package (optional)",
       "profile": "Profile name or id (optional)",
-      "action_id": "Action id (optional)"
+      "action_id": "Action id (optional)",
+      "input": "TV input name or id (optional)"
     }
   }
 }
