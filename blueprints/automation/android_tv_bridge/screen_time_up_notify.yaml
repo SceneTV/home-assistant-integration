@@ -1,0 +1,85 @@
+blueprint:
+  name: SceneTV notify when screen time is up
+  description: >-
+    Send a notification when a profile on the TV runs out of screen time or
+    reaches bedtime, and optionally when the launcher warns that time is almost
+    up. The TV enforces the limit itself; this only tells you about it.
+    Needs a SceneTV launcher with screen time support (launcher issue #34).
+  domain: automation
+  source_url: https://github.com/SceneTV/home-assistant-integration/blob/main/blueprints/automation/android_tv_bridge/screen_time_up_notify.yaml
+  input:
+    tv:
+      name: TV
+      selector:
+        device:
+          integration: android_tv_bridge
+    profile:
+      name: Profile (optional)
+      description: Profile name or id. Leave empty for every profile.
+      default: ""
+      selector:
+        text:
+    notify_action:
+      name: Notify action
+      description: >-
+        The notify action to call, such as notify.mobile_app_my_phone.
+      default: notify.notify
+      selector:
+        text:
+    include_warnings:
+      name: Also notify on the "almost up" warning
+      default: false
+      selector:
+        boolean:
+    extra_actions:
+      name: Extra actions (optional)
+      description: >-
+        Run after the notification, for example to grant extra time. The
+        trigger's event data has profile, profile_id and reason.
+      default: []
+      selector:
+        action:
+
+mode: queued
+max: 10
+
+variables:
+  notify_action: !input notify_action
+  include_warnings: !input include_warnings
+  profile_name: "{{ trigger.event.data.profile | default(trigger.event.data.profile_id, true) | default('A profile', true) }}"
+
+triggers:
+  - trigger: device
+    domain: android_tv_bridge
+    device_id: !input tv
+    type: screen_time_limit_reached
+    profile: !input profile
+    id: limit
+  - trigger: device
+    domain: android_tv_bridge
+    device_id: !input tv
+    type: screen_time_warning
+    profile: !input profile
+    id: warning
+
+conditions:
+  - condition: template
+    value_template: "{{ trigger.id == 'limit' or include_warnings }}"
+
+actions:
+  - action: "{{ notify_action }}"
+    data:
+      title: >-
+        {{ 'Screen time almost up' if trigger.id == 'warning'
+           else ('Bedtime' if trigger.event.data.reason == 'bedtime'
+           else 'Screen time is up') }}
+      message: >-
+        {% if trigger.id == 'warning' %}
+          {{ profile_name }} has {{ trigger.event.data.remaining_min | default('a few', true) }} minutes of screen time left.
+        {% elif trigger.event.data.reason == 'bedtime' %}
+          It's bedtime for {{ profile_name }}; the TV has stopped launching apps.
+        {% else %}
+          {{ profile_name }} has used today's screen time; the TV has stopped launching apps.
+        {% endif %}
+  - choose: []
+    default: !input extra_actions

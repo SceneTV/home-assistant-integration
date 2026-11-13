@@ -85,6 +85,8 @@
       "media_duration": { "name": "Media duration" },
       "last_key": { "name": "Last key" },
       "app_list_version": { "name": "App list version" },
+      "profile_screen_time_today": { "name": "{profile} screen time today" },
+      "profile_screen_time_remaining": { "name": "{profile} screen time remaining" },
       "screen": {
         "name": "Screen",
         "state": { "on": "On", "screensaver": "Screensaver", "off": "Off" }
@@ -103,6 +105,9 @@
       "accessibility": { "name": "Accessibility" },
       "overlay_permission": { "name": "Overlay permission" },
       "popups_enabled": { "name": "Home Assistant popups" },
+      "parental_enforcement": { "name": "Parental enforcement" },
+      "profile_locked": { "name": "Profile locked" },
+      "parental_pin_set": { "name": "Parental PIN set" },
       "screen_on": { "name": "Screen on" },
       "audio_playing": { "name": "Audio playing" },
       "gaming": { "name": "Gaming" },
@@ -123,6 +128,16 @@
     "select": {
       "launcher_mode": { "name": "Launcher mode" },
       "active_profile": { "name": "Active profile" }
+    },
+    "number": {
+      "profile_daily_budget": { "name": "{profile} daily screen time" }
+    },
+    "switch": {
+      "profile_restricted": { "name": "{profile} restricted" }
+    },
+    "time": {
+      "profile_bedtime_start": { "name": "{profile} bedtime start" },
+      "profile_bedtime_end": { "name": "{profile} bedtime end" }
     }
   },
   "services": {
@@ -455,6 +470,166 @@
           "description": "How long to wait for the launcher to answer, in milliseconds."
         }
       }
+    },
+    "set_profile_policy": {
+      "name": "Set profile screen time policy",
+      "description": "Change a profile's daily screen time budget and bedtime window. Fields you leave out stay as they are. Needs a SceneTV launcher with kids profile and screen time support (launcher issue #34).",
+      "fields": {
+        "entry_id": {
+          "name": "Config entry ID",
+          "description": "SceneTV config entry to target. Optional when you pick a target or only one launcher is configured."
+        },
+        "profile": {
+          "name": "Profile",
+          "description": "Profile name exactly as it appears on the TV. Use this or profile ID."
+        },
+        "profile_id": {
+          "name": "Profile ID",
+          "description": "Launcher profile id, as in the profiles list of the TV state. Use this or profile."
+        },
+        "daily_budget_min": {
+          "name": "Daily budget",
+          "description": "Minutes of screen time allowed per day. 0 blocks the profile for the day."
+        },
+        "bedtime_start": {
+          "name": "Bedtime start",
+          "description": "Local TV time when bedtime starts. The window may cross midnight."
+        },
+        "bedtime_end": {
+          "name": "Bedtime end",
+          "description": "Local TV time when bedtime ends."
+        },
+        "clear_daily_budget": {
+          "name": "Remove daily budget",
+          "description": "Remove the daily limit (no limit)."
+        },
+        "clear_bedtime": {
+          "name": "Remove bedtime",
+          "description": "Remove the bedtime window."
+        },
+        "timeout_ms": {
+          "name": "Command timeout",
+          "description": "How long to wait for the launcher to answer, in milliseconds."
+        }
+      }
+    },
+    "grant_extra_time": {
+      "name": "Grant extra screen time",
+      "description": "Add minutes to a profile's screen time for today only. Needs a SceneTV launcher with kids profile and screen time support (launcher issue #34).",
+      "fields": {
+        "entry_id": {
+          "name": "Config entry ID",
+          "description": "SceneTV config entry to target. Optional when you pick a target or only one launcher is configured."
+        },
+        "profile": {
+          "name": "Profile",
+          "description": "Profile name exactly as it appears on the TV. Use this or profile ID."
+        },
+        "profile_id": {
+          "name": "Profile ID",
+          "description": "Launcher profile id, as in the profiles list of the TV state. Use this or profile."
+        },
+        "minutes": {
+          "name": "Minutes",
+          "description": "Extra minutes for today."
+        },
+        "timeout_ms": {
+          "name": "Command timeout",
+          "description": "How long to wait for the launcher to answer, in milliseconds."
+        }
+      }
+    },
+    "lock_profile": {
+      "name": "Lock TV to profile",
+      "description": "Switch the TV to a profile and lock it there. While locked, only Home Assistant, the phone app, or the parent PIN on the TV or portal can unlock it or switch profile. Needs a SceneTV launcher with kids profile and screen time support (launcher issue #34).",
+      "fields": {
+        "entry_id": {
+          "name": "Config entry ID",
+          "description": "SceneTV config entry to target. Optional when you pick a target or only one launcher is configured."
+        },
+        "profile": {
+          "name": "Profile",
+          "description": "Profile name exactly as it appears on the TV. Use this or profile ID."
+        },
+        "profile_id": {
+          "name": "Profile ID",
+          "description": "Launcher profile id, as in the profiles list of the TV state. Use this or profile."
+        },
+        "timeout_ms": {
+          "name": "Command timeout",
+          "description": "How long to wait for the launcher to answer, in milliseconds."
+        }
+      }
+    },
+    "unlock_profile": {
+      "name": "Unlock profile",
+      "description": "Remove the profile lock set by Lock TV to profile. The TV stays on the current profile. Needs a SceneTV launcher with kids profile and screen time support (launcher issue #34).",
+      "fields": {
+        "entry_id": {
+          "name": "Config entry ID",
+          "description": "SceneTV config entry to target. Optional when you pick a target or only one launcher is configured."
+        },
+        "timeout_ms": {
+          "name": "Command timeout",
+          "description": "How long to wait for the launcher to answer, in milliseconds."
+        }
+      }
+    },
+    "set_profile_restricted": {
+      "name": "Set profile restricted",
+      "description": "Turn a profile into a restricted (kids) profile that can only open allowed apps and its own shortcuts, or lift the restriction. Needs a SceneTV launcher with kids profile and screen time support (launcher issue #34).",
+      "fields": {
+        "entry_id": {
+          "name": "Config entry ID",
+          "description": "SceneTV config entry to target. Optional when you pick a target or only one launcher is configured."
+        },
+        "profile": {
+          "name": "Profile",
+          "description": "Profile name exactly as it appears on the TV. Use this or profile ID."
+        },
+        "profile_id": {
+          "name": "Profile ID",
+          "description": "Launcher profile id, as in the profiles list of the TV state. Use this or profile."
+        },
+        "restricted": {
+          "name": "Restricted",
+          "description": "On to restrict the profile, off to lift the restriction."
+        },
+        "timeout_ms": {
+          "name": "Command timeout",
+          "description": "How long to wait for the launcher to answer, in milliseconds."
+        }
+      }
+    },
+    "set_profile_allowed_apps": {
+      "name": "Set profile allowed apps",
+      "description": "Choose which apps a restricted profile may open. Needs a SceneTV launcher with kids profile and screen time support (launcher issue #34).",
+      "fields": {
+        "entry_id": {
+          "name": "Config entry ID",
+          "description": "SceneTV config entry to target. Optional when you pick a target or only one launcher is configured."
+        },
+        "profile": {
+          "name": "Profile",
+          "description": "Profile name exactly as it appears on the TV. Use this or profile ID."
+        },
+        "profile_id": {
+          "name": "Profile ID",
+          "description": "Launcher profile id, as in the profiles list of the TV state. Use this or profile."
+        },
+        "packages": {
+          "name": "Apps",
+          "description": "Android package names, such as com.google.android.youtube.tvkids."
+        },
+        "mode": {
+          "name": "Mode",
+          "description": "replace sets the list to exactly these apps, add adds them, remove removes them."
+        },
+        "timeout_ms": {
+          "name": "Command timeout",
+          "description": "How long to wait for the launcher to answer, in milliseconds."
+        }
+      }
     }
   },
   "device_automation": {
@@ -474,6 +649,13 @@
       "queue_finished": "{entity_name} finished its play queue",
       "became_idle": "{entity_name} became idle",
       "became_active": "{entity_name} became active",
+      "launch_blocked": "{entity_name} blocked an app launch",
+      "screen_time_warning": "{entity_name} warned that screen time is almost up",
+      "screen_time_limit_reached": "{entity_name} reached a screen time limit or bedtime",
+      "profile_locked": "{entity_name} locked to a profile",
+      "profile_unlocked": "{entity_name} unlocked its profile",
+      "parental_enforcement_stopped": "{entity_name} stopped enforcing parental limits",
+      "parental_enforcement_started": "{entity_name} started enforcing parental limits",
       "screen_turned_on": "{entity_name} screen turned on",
       "screen_turned_off": "{entity_name} screen turned off",
       "screensaver_started": "{entity_name} started the screensaver",

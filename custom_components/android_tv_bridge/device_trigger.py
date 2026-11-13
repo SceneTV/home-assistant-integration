@@ -75,6 +75,7 @@ def _profile_matches(data: Mapping[str, Any], wanted: str) -> bool:
         data.get("id"),
         data.get("profile_name"),
         data.get("profile_id"),
+        data.get("profile"),
     )
     wanted_folded = wanted.casefold()
     return any(
@@ -155,6 +156,28 @@ TRIGGERS: dict[str, _TriggerSpec] = {
     ),
     "became_active": _TriggerSpec(
         "idle_changed", payload_check=lambda data: data.get("idle") is False
+    ),
+    # Kids profile and screen time (launcher issue #34).
+    "launch_blocked": _TriggerSpec(
+        "launch_blocked", CONF_PACKAGE, _package_matcher(lambda d: d.get("package"))
+    ),
+    "screen_time_warning": _TriggerSpec(
+        "screen_time_warning", CONF_PROFILE, _profile_matches
+    ),
+    "screen_time_limit_reached": _TriggerSpec(
+        "screen_time_limit_reached", CONF_PROFILE, _profile_matches
+    ),
+    "profile_locked": _TriggerSpec("profile_locked", CONF_PROFILE, _profile_matches),
+    "profile_unlocked": _TriggerSpec(
+        "profile_unlocked", CONF_PROFILE, _profile_matches
+    ),
+    "parental_enforcement_stopped": _TriggerSpec(
+        "parental_enforcement_changed",
+        payload_check=lambda data: data.get("active") is False,
+    ),
+    "parental_enforcement_started": _TriggerSpec(
+        "parental_enforcement_changed",
+        payload_check=lambda data: data.get("active") is True,
     ),
     "screen_turned_on": _TriggerSpec(
         "screen_changed", payload_check=_screen_is(SCREEN_ON)

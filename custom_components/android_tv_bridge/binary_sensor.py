@@ -26,6 +26,9 @@ class AndroidTVBridgeBinarySensorDescription(BinarySensorEntityDescription):
     """Describes an Android TV Bridge binary sensor."""
 
     value_key: str
+    # Fields only newer launchers send: the entity is unavailable, not
+    # "unknown", until the launcher reports the field.
+    requires_key: bool = False
     # Launcher field that must be listed in capabilities.sensors, if any.
     required_sensor: str | None = None
     # Stay available when the TV disconnects in standby (decision D4).
@@ -94,6 +97,26 @@ BINARY_SENSORS: tuple[AndroidTVBridgeBinarySensorDescription, ...] = (
         translation_key="popups_enabled",
         value_key="popups_enabled",
         entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    # Kids profile and screen time (launcher issue #34).
+    AndroidTVBridgeBinarySensorDescription(
+        key="parental_enforcement",
+        translation_key="parental_enforcement",
+        value_key="parental_enforcement_active",
+        requires_key=True,
+    ),
+    AndroidTVBridgeBinarySensorDescription(
+        key="profile_locked",
+        translation_key="profile_locked",
+        value_key="profile_locked",
+        requires_key=True,
+    ),
+    AndroidTVBridgeBinarySensorDescription(
+        key="parental_pin_set",
+        translation_key="parental_pin_set",
+        value_key="parental_pin_set",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        requires_key=True,
     ),
     AndroidTVBridgeBinarySensorDescription(
         key="screen_on",
@@ -193,6 +216,10 @@ class AndroidTVBridgeBinarySensor(AndroidTVBridgeEntity, BinarySensorEntity):
         """Keep the connection sensor available so it can report "off"."""
         if self.entity_description.key == "connection":
             return self.coordinator.last_update_success
+        if self.entity_description.requires_key and (
+            self.entity_description.value_key not in (self.coordinator.data or {})
+        ):
+            return False
         return super().available
 
     @property

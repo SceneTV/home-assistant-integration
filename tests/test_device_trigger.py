@@ -260,6 +260,71 @@ async def test_voice_clip_played_fires_for_this_tv_only(
     assert len(calls) == 1
 
 
+async def test_screen_time_limit_reached_filters_on_profile(
+    hass: HomeAssistant, device: dr.DeviceEntry, calls: list[ServiceCall]
+) -> None:
+    await _automation(hass, device.id, "screen_time_limit_reached", profile="kids")
+
+    _fire(
+        hass,
+        "screen_time_limit_reached",
+        {"profile_id": 2, "profile": "Kids", "reason": "budget_exhausted"},
+    )
+    _fire(
+        hass,
+        "screen_time_limit_reached",
+        {"profile_id": 1, "profile": "Living Room", "reason": "bedtime"},
+    )
+    _fire(
+        hass,
+        "screen_time_limit_reached",
+        {"profile_id": 2, "profile": "Kids", "reason": "bedtime"},
+        launcher_id=OTHER_LAUNCHER_ID,
+    )
+    await hass.async_block_till_done()
+
+    assert len(calls) == 1
+    assert calls[0].data["event"] == f"{DOMAIN}.screen_time_limit_reached"
+
+
+async def test_profile_filter_matches_event_profile_id(
+    hass: HomeAssistant, device: dr.DeviceEntry, calls: list[ServiceCall]
+) -> None:
+    await _automation(hass, device.id, "profile_locked", profile="2")
+
+    _fire(hass, "profile_locked", {"profile_id": 2, "profile": "Kids"})
+    _fire(hass, "profile_unlocked", {"profile_id": 2, "profile": "Kids"})
+    await hass.async_block_till_done()
+
+    assert len(calls) == 1
+
+
+async def test_parental_enforcement_triggers_split_on_active(
+    hass: HomeAssistant, device: dr.DeviceEntry, calls: list[ServiceCall]
+) -> None:
+    await _automation(hass, device.id, "parental_enforcement_stopped")
+
+    _fire(hass, "parental_enforcement_changed", {"active": True})
+    _fire(hass, "parental_enforcement_changed", {"active": False})
+    await hass.async_block_till_done()
+
+    assert len(calls) == 1
+    assert calls[0].data["type"] == "parental_enforcement_stopped"
+
+
+async def test_launch_blocked_filters_on_package(
+    hass: HomeAssistant, device: dr.DeviceEntry, calls: list[ServiceCall]
+) -> None:
+    await _automation(hass, device.id, "launch_blocked", package="com.netflix.ninja")
+
+    _fire(hass, "launch_blocked", {"package": "com.netflix.ninja", "reason": "not_allowed"})
+    _fire(hass, "launch_blocked", {"package": "com.other", "reason": "not_allowed"})
+    await hass.async_block_till_done()
+
+    assert len(calls) == 1
+
+
+
 async def test_screen_triggers_split_on_new_value(
     hass: HomeAssistant, device: dr.DeviceEntry, calls: list[ServiceCall]
 ) -> None:

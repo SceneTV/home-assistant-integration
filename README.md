@@ -33,6 +33,7 @@ Initial scope:
 - One Home Assistant device per paired launcher
 - Authenticated local WebSocket connection
 - Media player, sensors, binary sensors, buttons, launcher mode select, notify entity, services, and bridge events
+- Kids profile and screen time: per-profile screen time sensors, budget, bedtime and restriction controls, and a profile lock (needs launcher issue #34)
 - Camera snapshot popups for cameras configured on the TV (`show_camera`)
 - The device page's **Visit** link opens the launcher's configuration portal (`http://<tv>:8765/configure`)
 
@@ -469,6 +470,93 @@ data:
 The current queue appears in the entity state data under `queue`. Launchers
 without queue support reject these services as unsupported.
 
+## Kids profile and screen time
+
+Needs a SceneTV launcher with the matching parts of
+[launcher issue #34](https://github.com/SceneTV/launcher/issues/34): restricted
+profiles (part A) for the restricted switch, allowed apps and the parental
+enforcement sensor, and screen time (part B) for the screen time sensors,
+budget, bedtime, extra time and the profile lock. With an older launcher these
+entities are not created (the TV-wide binary sensors show unavailable) and the
+actions fail with a message asking you to update the launcher.
+
+**This is a set of guardrails, not a lock.** The launcher enforces the limits
+on the TV, even while Home Assistant is down, but a determined child can get
+around them: by turning off the SceneTV accessibility service (the
+**Parental enforcement** sensor turns off and the
+`parental_enforcement_stopped` trigger fires), by changing the default launcher
+in Android settings if they reach them, with voice search, or by browsing
+anywhere inside an allowed app such as YouTube. For in-app content, pair this
+with Google TV's own kids profile or YouTube Kids.
+
+### Entities
+
+For each SceneTV profile, as soon as the launcher reports the field:
+
+| Entity | What it shows |
+| --- | --- |
+| `sensor.<tv>_<profile>_screen_time_today` | Minutes of screen time today (any app in the foreground with the screen on). `state_class: total_increasing`, resets at local midnight on the TV. Attributes: `limit_state` (`ok`, `warning`, `budget_exhausted`, `bedtime`), `daily_budget_min`, `bedtime_start`, `bedtime_end`, `restricted` |
+| `sensor.<tv>_<profile>_screen_time_remaining` | Minutes left today; unknown when the profile has no daily budget |
+| `number.<tv>_<profile>_daily_screen_time` | Daily budget in minutes; unknown when there is no limit. Setting it sends `set_profile_policy` |
+| `time.<tv>_<profile>_bedtime_start`, `time.<tv>_<profile>_bedtime_end` | Bedtime window in the TV's local time (may cross midnight); unknown when there is none |
+| `switch.<tv>_<profile>_restricted` | Restricted (kids) profile: only allowed apps and the profile's own shortcuts open |
+
+Profiles added on the TV later get their entities automatically. A profile
+deleted on the TV leaves its entities unavailable; remove them from the entity
+settings if you do not need them.
+
+TV-wide binary sensors:
+
+| Entity | On when |
+| --- | --- |
+| Parental enforcement | The launcher can enforce limits (its accessibility service is on) |
+| Profile locked | The TV is locked to a profile (`lock_profile` from Home Assistant, the phone app, or the TV/portal with the parent PIN) |
+| Parental PIN set | A parent PIN is set on the TV (diagnostic) |
+
+### Actions
+
+All take the usual TV target (device, area, entity or `entry_id`). Pick the
+profile with `profile` (its name on the TV) or `profile_id`.
+
+| Action | Fields |
+| --- | --- |
+| `android_tv_bridge.set_profile_policy` | `daily_budget_min`, `bedtime_start`, `bedtime_end`; fields left out stay unchanged. `clear_daily_budget: true` removes the limit, `clear_bedtime: true` removes the window (or pass `null` in YAML) |
+| `android_tv_bridge.grant_extra_time` | `minutes` (1 to 720), for today only |
+| `android_tv_bridge.lock_profile` | Switches to the profile and locks it there. While locked, Home Assistant and the phone app can unlock or switch profile, and the TV or portal can unlock with the parent PIN, whoever made the lock |
+| `android_tv_bridge.unlock_profile` | none |
+| `android_tv_bridge.set_profile_restricted` | `restricted: true` or `false` |
+| `android_tv_bridge.set_profile_allowed_apps` | `packages` (a list of package names), `mode`: `replace` (default), `add` or `remove` |
+
+```yaml
+action: android_tv_bridge.set_profile_policy
+target:
+  device_id: your_home_assistant_device_id
+data:
+  profile: Kids
+  daily_budget_min: 90
+  bedtime_start: "20:00"
+  bedtime_end: "07:00"
+```
+
+The parent PIN cannot be set from Home Assistant; set it in the TV's Settings
+or the configuration portal. Home Assistant never needs the PIN to switch
+profile. Launch actions (`launch_app` and so on) are still subject to the
+profile's limits, so switch profile first if you want to open an app the
+current profile may not use.
+
+### Events and triggers
+
+| Event | When | Extra data |
+| --- | --- | --- |
+| `android_tv_bridge.launch_blocked` | The launcher blocked an app | `package`, `reason`: `not_allowed`, `budget_exhausted` or `bedtime` |
+| `android_tv_bridge.parental_enforcement_changed` | Enforcement turned on or off | `active` |
+| `android_tv_bridge.screen_time_warning` | Screen time is almost up (5 and 1 minutes left) | `remaining_min` |
+| `android_tv_bridge.screen_time_limit_reached` | The budget ran out or bedtime started | `reason`: `budget_exhausted` or `bedtime` |
+| `android_tv_bridge.profile_locked`, `profile_unlocked` | `lock_profile` / `unlock_profile` took effect | |
+
+All carry `profile_id` and `profile`. Each has a matching device trigger (see
+[Device triggers](#device-triggers)).
+
 ## Events
 
 The integration fires these Home Assistant events:
@@ -487,6 +575,7 @@ The integration fires these Home Assistant events:
 | `android_tv_bridge.queue_item_started`, `queue_item_finished`, `queue_item_failed` | A queue item changed state (`item_id`) |
 | `android_tv_bridge.queue_paused` | The queue paused (`reason`, for example `user_input` or `foreground_changed`) |
 | `android_tv_bridge.queue_finished` | The last queue item finished |
+| `android_tv_bridge.launch_blocked`, `parental_enforcement_changed`, `screen_time_warning`, `screen_time_limit_reached`, `profile_locked`, `profile_unlocked` | Kids profile and screen time, see [Kids profile and screen time](#events-and-triggers) |
 | `android_tv_bridge.screen_changed` | The screen turned on or off, or the screensaver started (`screen`, `previous_screen`, `timestamp`) |
 | `android_tv_bridge.tv_input_state_changed` | A passthrough (HDMI) input changed state (`id`, `label`, `state`, `previous_state`, `timestamp`) |
 | `android_tv_bridge.audio_playing_changed` | Audio from any app started or stopped (`audio_playing`, `timestamp`) |
@@ -556,6 +645,10 @@ under **When** > **Device**.
 | Web card or popup sent an action | `web_action` | `action_id` (matches `action`) |
 | Started the next queue item / finished the queue | `queue_item_started`, `queue_finished` | |
 | Became idle / became active | `idle_changed` | |
+| Blocked an app launch | `launch_blocked` | `package` |
+| Screen time almost up / limit reached | `screen_time_warning`, `screen_time_limit_reached` | `profile` |
+| Locked / unlocked profile | `profile_locked`, `profile_unlocked` | `profile` |
+| Stopped / started enforcing parental limits | `parental_enforcement_changed` | |
 | Screen turned on / screen turned off / screensaver started | `screen_changed` | |
 | A device on a TV input woke up | `tv_input_state_changed` (state becomes `connected`) | `input`, an input name or id |
 
@@ -588,13 +681,17 @@ HACS does not install blueprints, so import each one from **Settings** >
 | Doorbell popup | Shows a camera snapshot over any app when a doorbell or motion sensor fires. Optionally pauses playback. | `https://github.com/SceneTV/home-assistant-integration/blob/main/blueprints/automation/android_tv_bridge/doorbell_popup.yaml` |
 | Announce on TV | Speaks a message on the TV with text-to-speech when any trigger fires, as a voice clip popup. Optionally pauses playback. | `https://github.com/SceneTV/home-assistant-integration/blob/main/blueprints/automation/android_tv_bridge/announce_on_tv.yaml` |
 | Bedtime lock | Warns before bedtime, then stops playback and goes home. Until morning, closes apps opened on the kids profile. | `https://github.com/SceneTV/home-assistant-integration/blob/main/blueprints/automation/android_tv_bridge/bedtime_lock.yaml` |
+| Bedtime lock (kids profile) | Locks the TV to the kids profile at bedtime with `lock_profile` and unlocks it in the morning. Needs launcher issue #34. | `https://github.com/SceneTV/home-assistant-integration/blob/main/blueprints/automation/android_tv_bridge/kids_bedtime_lock.yaml` |
+| Notify when screen time is up | Sends a notification when a profile runs out of screen time or reaches bedtime, optionally also on the warning. Needs launcher issue #34. | `https://github.com/SceneTV/home-assistant-integration/blob/main/blueprints/automation/android_tv_bridge/screen_time_up_notify.yaml` |
 | Lights off when idle | Turns lights off after nothing has played for a while (and on the TV's idle trigger once the launcher sends it). | `https://github.com/SceneTV/home-assistant-integration/blob/main/blueprints/automation/android_tv_bridge/lights_off_when_idle.yaml` |
 | Profile from presence | Switches the TV to a person's profile when they come home, and optionally to another when they leave. | `https://github.com/SceneTV/home-assistant-integration/blob/main/blueprints/automation/android_tv_bridge/presence_profile.yaml` |
 
 Notes:
 
-- The bedtime lock is a soft lock. SceneTV profiles do not restrict apps yet,
-  so switching profile on the TV gets around it.
+- The original bedtime lock is a soft lock for launchers without kids profile
+  support: switching profile on the TV gets around it. With a launcher that
+  has [kids profile and screen time](#kids-profile-and-screen-time) support,
+  use the kids profile bedtime lock instead.
 - The doorbell popup loads the snapshot from Home Assistant through the
   camera's short-lived access token, so the TV needs to reach the Home
   Assistant URL you enter.

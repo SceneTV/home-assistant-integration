@@ -10,6 +10,7 @@ from homeassistant.components.sensor import (
     SensorDeviceClass,
     SensorEntity,
     SensorEntityDescription,
+    SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory, UnitOfTime
@@ -18,6 +19,11 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .const import DOMAIN, SCREEN_STATES
 from .entity import AndroidTVBridgeEntity
+from .parental import (
+    AndroidTVBridgeProfileEntity,
+    ProfileEntityDescription,
+    async_setup_profile_entities,
+)
 from .runtime import AndroidTVBridgeRuntime
 
 
@@ -157,6 +163,44 @@ SENSORS: tuple[AndroidTVBridgeSensorDescription, ...] = (
 )
 
 
+@dataclass(frozen=True, kw_only=True)
+class AndroidTVBridgeProfileSensorDescription(
+    ProfileEntityDescription, SensorEntityDescription
+):
+    """Describes a per-profile sensor."""
+
+
+PROFILE_SENSORS: tuple[AndroidTVBridgeProfileSensorDescription, ...] = (
+    AndroidTVBridgeProfileSensorDescription(
+        key="screen_time_today",
+        translation_key="profile_screen_time_today",
+        value_key="screen_time_today_min",
+        native_unit_of_measurement=UnitOfTime.MINUTES,
+        device_class=SensorDeviceClass.DURATION,
+        # The launcher resets the count at local midnight; total_increasing
+        # treats the drop to 0 as a new cycle in long-term statistics.
+        state_class=SensorStateClass.TOTAL_INCREASING,
+    ),
+    AndroidTVBridgeProfileSensorDescription(
+        key="screen_time_remaining",
+        translation_key="profile_screen_time_remaining",
+        # null when the profile has no daily budget: the sensor shows unknown.
+        value_key="remaining_min",
+        native_unit_of_measurement=UnitOfTime.MINUTES,
+        device_class=SensorDeviceClass.DURATION,
+    ),
+)
+
+# Extra profile fields shown as attributes on the per-profile sensors.
+PROFILE_SENSOR_ATTRIBUTES = (
+    "limit_state",
+    "daily_budget_min",
+    "bedtime_start",
+    "bedtime_end",
+    "restricted",
+)
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry,
@@ -189,6 +233,9 @@ async def async_setup_entry(
 
     _async_add_new()
     entry.async_on_unload(runtime.coordinator.async_add_listener(_async_add_new))
+    async_setup_profile_entities(
+        runtime, entry, async_add_entities, PROFILE_SENSORS, AndroidTVBridgeProfileSensor
+    )
 
 
 class AndroidTVBridgeSensor(AndroidTVBridgeEntity, SensorEntity):
@@ -210,3 +257,30 @@ class AndroidTVBridgeSensor(AndroidTVBridgeEntity, SensorEntity):
         if self.entity_description.attributes_fn is None:
             return None
         return self.entity_description.attributes_fn(self.coordinator.data or {})
+
+
+class AndroidTVBridgeProfileSensor(AndroidTVBridgeProfileEntity, SensorEntity):
+    """Screen time sensor for one launcher profile."""
+
+    entity_description: AndroidTVBridgeProfileSensorDescription
+
+    @property
+    def native_value(self) -> Any:
+        """Return the profile's minutes."""
+        value = self.profile_value
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        return value
+
+    @property
+    def extra_state_attributes(self) -> Mapping[str, Any] | None:
+        """Return the profile's limit state and policy."""
+        profile = self.profile or {}
+        attributes = {
+            "profile_id": self.profile_id,
+            "profile": profile.get("name"),
+        }
+        for key in PROFILE_SENSOR_ATTRIBUTES:
+            if key in profile:
+                attributes[key] = profile[key]
+        return attributes

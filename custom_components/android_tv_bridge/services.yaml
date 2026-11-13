@@ -974,3 +974,191 @@ play_voice_clip:
           min: 1000
           max: 60000
           mode: box
+
+set_profile_policy:
+  target:
+    entity:
+      integration: android_tv_bridge
+  fields:
+    entry_id:
+      selector:
+        text:
+    profile:
+      example: Kids
+      selector:
+        text:
+    profile_id:
+      selector:
+        number:
+          min: 1
+          max: 1000000
+          mode: box
+    daily_budget_min:
+      selector:
+        number:
+          min: 0
+          max: 1440
+          unit_of_measurement: min
+          mode: box
+    bedtime_start:
+      example: "20:00"
+      selector:
+        time:
+    bedtime_end:
+      example: "07:00"
+      selector:
+        time:
+    clear_daily_budget:
+      selector:
+        boolean:
+    clear_bedtime:
+      selector:
+        boolean:
+    timeout_ms:
+      selector:
+        number:
+          min: 1000
+          max: 60000
+          mode: box
+
+grant_extra_time:
+  target:
+    entity:
+      integration: android_tv_bridge
+  fields:
+    entry_id:
+      selector:
+        text:
+    profile:
+      example: Kids
+      selector:
+        text:
+    profile_id:
+      selector:
+        number:
+          min: 1
+          max: 1000000
+          mode: box
+    minutes:
+      required: true
+      example: 15
+      selector:
+        number:
+          min: 1
+          max: 720
+          unit_of_measurement: min
+          mode: box
+    timeout_ms:
+      selector:
+        number:
+          min: 1000
+          max: 60000
+          mode: box
+
+lock_profile:
+  target:
+    entity:
+      integration: android_tv_bridge
+  fields:
+    entry_id:
+      selector:
+        text:
+    profile:
+      example: Kids
+      selector:
+        text:
+    profile_id:
+      selector:
+        number:
+          min: 1
+          max: 1000000
+          mode: box
+    timeout_ms:
+      selector:
+        number:
+          min: 1000
+          max: 60000
+          mode: box
+
+unlock_profile:
+  target:
+    entity:
+      integration: android_tv_bridge
+  fields:
+    entry_id:
+      selector:
+        text:
+    timeout_ms:
+      selector:
+        number:
+          min: 1000
+          max: 60000
+          mode: box
+
+set_profile_restricted:
+  target:
+    entity:
+      integration: android_tv_bridge
+  fields:
+    entry_id:
+      selector:
+        text:
+    profile:
+      example: Kids
+      selector:
+        text:
+    profile_id:
+      selector:
+        number:
+          min: 1
+          max: 1000000
+          mode: box
+    restricted:
+      required: true
+      selector:
+        boolean:
+    timeout_ms:
+      selector:
+        number:
+          min: 1000
+          max: 60000
+          mode: box
+
+set_profile_allowed_apps:
+  target:
+    entity:
+      integration: android_tv_bridge
+  fields:
+    entry_id:
+      selector:
+        text:
+    profile:
+      example: Kids
+      selector:
+        text:
+    profile_id:
+      selector:
+        number:
+          min: 1
+          max: 1000000
+          mode: box
+    packages:
+      required: true
+      example: '["com.google.android.youtube.tvkids"]'
+      selector:
+        text:
+          multiple: true
+    mode:
+      default: replace
+      selector:
+        select:
+          options:
+            - replace
+            - add
+            - remove
+    timeout_ms:
+      selector:
+        number:
+          min: 1000
+          max: 60000
+          mode: box
