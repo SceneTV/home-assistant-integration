@@ -527,7 +527,7 @@
     },
     "lock_profile": {
       "name": "Lock TV to profile",
-      "description": "Switch the TV to a profile and lock it there. While locked, the TV PIN cannot leave the profile; only Home Assistant can switch profile or unlock. Needs a SceneTV launcher with kids profile and screen time support (launcher issue #34).",
+      "description": "Switch the TV to a profile and lock it there. While locked, only Home Assistant, the phone app, or the parent PIN on the TV or portal can unlock it or switch profile. Needs a SceneTV launcher with kids profile and screen time support (launcher issue #34).",
       "fields": {
         "entry_id": {
           "name": "Config entry ID",

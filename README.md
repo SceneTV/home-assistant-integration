@@ -510,7 +510,7 @@ TV-wide binary sensors:
 | Entity | On when |
 | --- | --- |
 | Parental enforcement | The launcher can enforce limits (its accessibility service is on) |
-| Profile locked | Home Assistant locked the TV to a profile with `lock_profile` |
+| Profile locked | The TV is locked to a profile (`lock_profile` from Home Assistant, the phone app, or the TV/portal with the parent PIN) |
 | Parental PIN set | A parent PIN is set on the TV (diagnostic) |
 
 ### Actions
@@ -522,7 +522,7 @@ profile with `profile` (its name on the TV) or `profile_id`.
 | --- | --- |
 | `android_tv_bridge.set_profile_policy` | `daily_budget_min`, `bedtime_start`, `bedtime_end`; fields left out stay unchanged. `clear_daily_budget: true` removes the limit, `clear_bedtime: true` removes the window (or pass `null` in YAML) |
 | `android_tv_bridge.grant_extra_time` | `minutes` (1 to 720), for today only |
-| `android_tv_bridge.lock_profile` | Switches to the profile and locks it there. While locked, the TV's parent PIN cannot leave and only Home Assistant can switch profile |
+| `android_tv_bridge.lock_profile` | Switches to the profile and locks it there. While locked, Home Assistant and the phone app can unlock or switch profile, and the TV or portal can unlock with the parent PIN, whoever made the lock |
 | `android_tv_bridge.unlock_profile` | none |
 | `android_tv_bridge.set_profile_restricted` | `restricted: true` or `false` |
 | `android_tv_bridge.set_profile_allowed_apps` | `packages` (a list of package names), `mode`: `replace` (default), `add` or `remove` |

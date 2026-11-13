@@ -2,8 +2,8 @@ blueprint:
   name: SceneTV bedtime lock (kids profile)
   description: >-
     At bedtime, switch the TV to the kids profile and lock it there; unlock it
-    in the morning. While locked, the TV's parent PIN cannot leave the profile,
-    only Home Assistant can. The launcher's own limits for that profile
+    in the morning. While locked, the profile can only be left from Home
+    Assistant, the phone app, or with the parent PIN on the TV. The launcher's own limits for that profile
     (restricted apps, daily budget, bedtime window) apply as usual.
     Needs a SceneTV launcher with kids profile and screen time support
     (launcher issue #34). These are guardrails, not a security lock.
